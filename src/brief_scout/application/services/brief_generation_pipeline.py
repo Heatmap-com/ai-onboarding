@@ -84,8 +84,10 @@ class BriefGenerationPipeline:
 
             # ─── RESEARCH ───
             async for event in self._research.stream(intake_result.extracted_data):
+                # Forward per-step events so consumers can track individual steps.
+                stage = event.stage if event.stage == "research_step" else "research"
                 yield PipelineEvent(
-                    stage="research",
+                    stage=stage,
                     status=_map_research_status(event.status),
                     payload=event.payload,
                 )

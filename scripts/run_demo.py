@@ -102,8 +102,14 @@ async def run_demo() -> None:
                         f"(complete={event.get('is_complete', False)})\n"
                     )
                 elif event_type == "research":
+                    status = event.get("status", "")
                     steps = event.get("steps", [])
-                    lines.append(f"- **Research started:** {', '.join(steps)}\n")
+                    if status == "started" and steps:
+                        lines.append(f"- **Research started:** {', '.join(steps)}\n")
+                    elif status == "complete":
+                        lines.append("- **Research complete** ✅\n")
+                    else:
+                        lines.append(f"- **Research:** {status}\n")
                 elif event_type == "research_step":
                     lines.append(f"  - _{event.get('name')}: {event.get('status')}_\n")
                 elif event_type == "synthesis":

@@ -1,6 +1,6 @@
 # CreativeOS Onboarding Demo
 This transcript shows a complete onboarding conversation through the Brief Scout API, configured for a CreativeOS-style workflow.
-**Session ID:** `eb3669fc-ebcd-40d1-9eac-3770f9616d7d`
+**Session ID:** `cf3f84bb-0f1a-468d-a61c-26aca7850c75`
 ---
 **User:** Hi! I'm Alex. I want to get my brand set up on CreativeOS. We're Nike, and our website is nike.com.
 **CreativeOS:** Got it — Nike. Thanks, Alex. Who are the top 2 or 3 competitors you want to stand apart from?
@@ -16,16 +16,17 @@ _Status: intaking_
 _Status: intaking_
 **User:** We want to explore authentic athlete stories and avoid generic celebrity endorsements.
 **CreativeOS:** Perfect — I have everything I need, Alex. I'm now running research across 5 areas: brand audit, competitor scan, trend pulse, customer voice, and hook mining. This will take just a moment...
-_Status: researching_
+_Status: complete_
 ---
 ## Pipeline Stream
 - **Intake:** Perfect — I have everything I need, Alex. I'm now running research across 5 areas: brand audit, competitor scan, trend pulse, customer voice, and hook mining. This will take just a moment... (complete=True)
-- **Research started:** Brand Audit, Competitor Scan, Trend Pulse, Customer Voice, Hook Mining
-  - _Brand Audit: complete_
-  - _Competitor Scan: complete_
-  - _Trend Pulse: complete_
-  - _Customer Voice: complete_
-  - _Hook Mining: complete_
+- **Research started:** brand_audit, competitor_scan, trend_pulse, customer_voice, hook_mining
+  - _brand_audit: complete_
+  - _competitor_scan: complete_
+  - _trend_pulse: complete_
+  - _customer_voice: complete_
+  - _hook_mining: complete_
+- **Research complete** ✅
 - **Synthesis:** started
 - **Synthesis:** complete
 - **Brief generated** ✅
@@ -41,7 +42,7 @@ _Status: researching_
 ```markdown
 # Creative Brief: Nike
 
-_Generated: 2026-06-28 18:46 UTC_
+_Generated: 2026-06-28 20:23 UTC_
 
 ---
 
