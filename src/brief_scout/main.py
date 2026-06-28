@@ -20,7 +20,13 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
-from brief_scout.application.services import BriefGenerationPipeline
+from brief_scout.application.services import (
+    BriefGenerationPipeline,
+    DefaultResearchStepRegistry,
+    IntakeDataDiffer,
+    IntakeDataExtractor,
+    JourneyAcknowledgementService,
+)
 from brief_scout.application.use_cases import (
     IntakeUseCase,
     ResearchUseCase,
@@ -133,18 +139,35 @@ def create_app(
     merger = IntakeDataMerger(journey=journey)
 
     # ─── 6. Use Cases + Pipeline ───
-    intake_use_case = IntakeUseCase(
+    intake_extractor = IntakeDataExtractor(
         llm=llm,
-        config=config,
-        telemetry=telemetry,
-        storage=storage,
         journey=journey,
+        renderer=template_renderer,
+        provider_config_source=config,
+        logger=telemetry,
+    )
+    intake_acknowledgement_service = JourneyAcknowledgementService(
+        renderer=template_renderer,
+    )
+    intake_differ = IntakeDataDiffer(journey=journey)
+
+    intake_use_case = IntakeUseCase(
+        extractor=intake_extractor,
+        acknowledgement_service=intake_acknowledgement_service,
+        differ=intake_differ,
+        storage=storage,
         completeness_checker=completeness_checker,
         merger=merger,
+        logger=telemetry,
+        journey=journey,
+        extraction_system=config.app_config.prompts.extraction_system,
+    )
+    research_step_registry = DefaultResearchStepRegistry(
+        prompts=config.app_config.prompts.research_steps,
+        llm=llm,
     )
     research_use_case = ResearchUseCase(
-        llm=llm,
-        config=config,
+        registry=research_step_registry,
         telemetry=telemetry,
     )
     synthesis_use_case = SynthesisUseCase(
@@ -156,7 +179,7 @@ def create_app(
     # Build the research pipeline from the configured research steps.
     # ResearchUseCase is the composition helper that knows how to map prompts
     # and LLM adapters onto the pluggable ResearchPipeline.
-    research_pipeline = research_use_case._build_pipeline()
+    research_pipeline = research_use_case.build_pipeline()
     pipeline = BriefGenerationPipeline(
         intake_use_case=intake_use_case,
         research_pipeline=research_pipeline,
@@ -192,16 +215,18 @@ def create_app(
     app.state.telemetry = telemetry
     app.state.storage = storage
     app.state.llm = llm
-    app.state.token_usage = (
-        llm.token_usage if isinstance(llm, TokenTrackingLLM) else None
-    )
+    app.state.token_usage = llm.token_usage if isinstance(llm, TokenTrackingLLM) else None
     app.state.completeness_checker = completeness_checker
+    app.state.completeness_check_port = completeness_checker
     app.state.journey = journey
     app.state.template_renderer = template_renderer
     app.state.intake_use_case = intake_use_case
+    app.state.intake_port = intake_use_case
     app.state.research_use_case = research_use_case
     app.state.synthesis_use_case = synthesis_use_case
+    app.state.synthesis_port = synthesis_use_case
     app.state.research_pipeline = research_pipeline
+    app.state.research_pipeline_port = research_pipeline
     app.state.pipeline = pipeline
 
     telemetry.log(

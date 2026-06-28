@@ -64,27 +64,18 @@ class LLMAdapterFactory:
             raise ValueError(f"Unknown LLM adapter_id: {adapter_id}")
 
         extras = provider_config.model_extra or {}
-        if adapter_id == "fake":
-            return FakeLLMAdapter(
-                fixture_dir=extras.get("fixture_dir", "tests/fixtures/llm_responses"),
-                default_fixture=extras.get("default_fixture", "default"),
-                latency_ms=extras.get("latency_ms", 50.0),
-                telemetry=telemetry,
-                demo_journey_path=extras.get("demo_journey_path"),
-            )
+        kwargs: dict[str, Any] = {
+            "api_key": provider_config.api_key,
+            "base_url": provider_config.base_url or None,
+            "model": provider_config.model,
+            "temperature": provider_config.temperature,
+            "max_tokens": provider_config.max_tokens,
+            "timeout_seconds": provider_config.timeout_seconds,
+            "telemetry": telemetry,
+            **extras,
+        }
 
-        return cast(
-            "LLMPort",
-            adapter_cls(
-                api_key=provider_config.api_key,
-                base_url=provider_config.base_url or None,
-                model=provider_config.model,
-                temperature=provider_config.temperature,
-                max_tokens=provider_config.max_tokens,
-                timeout_seconds=provider_config.timeout_seconds,
-                telemetry=telemetry,
-            ),
-        )
+        return cast("LLMPort", adapter_cls(**kwargs))
 
     @staticmethod
     def _derive_id_from_class(adapter_class: str) -> str:

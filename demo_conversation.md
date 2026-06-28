@@ -1,6 +1,6 @@
 # CreativeOS Onboarding Demo
 This transcript shows a complete onboarding conversation through the Brief Scout API, configured for a CreativeOS-style workflow.
-**Session ID:** `a0be0229-5c83-48ee-bfd0-aec7b46bc05e`
+**Session ID:** `10e95074-0050-4d64-810c-b0bc24a7b5f3`
 ---
 **User:** Hi! I'm Alex. I want to get my brand set up on CreativeOS. We're Nike, and our website is nike.com.
 **CreativeOS:** Got it — Nike. Thanks, Alex. Who are the top 2 or 3 competitors you want to stand apart from?
@@ -42,7 +42,7 @@ _Status: researching_
 ```markdown
 # Creative Brief: Nike
 
-_Generated: 2026-06-28 20:36 UTC_
+_Generated: 2026-06-28 22:10 UTC_
 
 ---
 

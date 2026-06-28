@@ -56,7 +56,7 @@ class OpenAIAdapter(LangChainBaseAdapter):
         if prompt.system:
             messages.append({"role": "system", "content": prompt.system})
         for ctx in prompt.context:
-            messages.append({"role": ctx.get("role", "user"), "content": ctx["content"]})
+            messages.append({"role": ctx.role, "content": ctx.content})
         messages.append({"role": "user", "content": prompt.user})
         return messages
 

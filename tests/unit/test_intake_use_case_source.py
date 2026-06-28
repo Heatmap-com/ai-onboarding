@@ -11,6 +11,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from brief_scout.application.services import (
+    IntakeDataDiffer,
+    IntakeDataExtractor,
+    JourneyAcknowledgementService,
+)
 from brief_scout.application.use_cases.intake_use_case import (
     IntakeResponse,
     IntakeUseCase,
@@ -84,14 +89,25 @@ def use_case(
     """Provide an IntakeUseCase with a mock LLM."""
     llm = AsyncMock()
     llm.provider_name = "mock"
-    return IntakeUseCase(
+    extractor = IntakeDataExtractor(
         llm=llm,
-        config=config,
-        telemetry=telemetry,
-        storage=storage,
         journey=journey,
+        provider_config_source=config,
+        logger=telemetry,
+    )
+    acknowledgement_service = JourneyAcknowledgementService()
+    differ = IntakeDataDiffer(journey=journey)
+
+    return IntakeUseCase(
+        extractor=extractor,
+        acknowledgement_service=acknowledgement_service,
+        differ=differ,
+        storage=storage,
         completeness_checker=completeness_checker,
         merger=merger,
+        logger=telemetry,
+        journey=journey,
+        extraction_system=config.app_config.prompts.extraction_system,
     )
 
 
@@ -103,7 +119,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase, storage: InMemoryStorageAdapter
     ) -> None:
         """Incomplete intake should return a follow-up question."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         llm.complete_structured.return_value = IntakeData(
             first_name="Alex",
             brand_name="Nike",
@@ -132,7 +148,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase
     ) -> None:
         """Complete intake should transition to researching status."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         llm.complete_structured.return_value = IntakeData(
             first_name="Alex",
             brand_name="Nike",
@@ -159,7 +175,7 @@ class TestIntakeUseCase:
     @pytest.mark.asyncio
     async def test_should_merge_extracted_data_with_existing(self, use_case: IntakeUseCase) -> None:
         """Newly extracted empty fields should not overwrite existing data."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         session = ChatSession()
         session.intake_data = IntakeData(
             brand_name="Nike",
@@ -183,7 +199,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase
     ) -> None:
         """If LLM extraction fails, existing intake data should be preserved."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         llm.complete_structured.side_effect = LLMCallError("boom", provider="mock")
 
         session = ChatSession()
@@ -198,7 +214,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase
     ) -> None:
         """Next question should acknowledge known fields."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         llm.complete_structured.return_value = IntakeData(
             first_name="Alex",
             brand_name="Nike",
@@ -237,7 +253,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase
     ) -> None:
         """When required fields are complete but creative directions are missing."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         llm.complete_structured.return_value = IntakeData(
             first_name="Alex",
             brand_name="Nike",
@@ -260,7 +276,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase
     ) -> None:
         """When required fields and creative directions are complete but additional context missing."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         llm.complete_structured.return_value = IntakeData(
             first_name="Alex",
             brand_name="Nike",
@@ -287,7 +303,7 @@ class TestIntakeUseCase:
         self, use_case: IntakeUseCase
     ) -> None:
         """Once optional fields are collected, intake should transition to research."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._extractor._llm)
         session = ChatSession()
         session.asked_optional_questions = ["creative_directions", "additional_context"]
         llm.complete_structured.return_value = IntakeData(

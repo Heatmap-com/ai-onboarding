@@ -29,9 +29,10 @@ from brief_scout.application.dto import (
     MessageRequest,
     SessionResponse,
 )
-from brief_scout.application.services import BriefGenerationPipeline, PipelineEvent
+from brief_scout.application.services import PipelineEvent
 from brief_scout.domain.models import ChatSession
 from brief_scout.domain.ports.config_port import ConfigurationPort  # noqa: TC001
+from brief_scout.domain.ports.pipeline_port import PipelinePort  # noqa: TC001
 from brief_scout.domain.ports.storage_port import BriefStoragePort  # noqa: TC001
 from brief_scout.interfaces.api.dependencies import (
     get_config,
@@ -58,7 +59,7 @@ async def create_session(
 
     return SessionResponse(
         session_id=session.session_id,
-        status=session.status.value,
+        status=session.status,
         created_at=session.created_at,
     )
 
@@ -68,7 +69,7 @@ async def send_message(
     session_id: str,
     request_body: MessageRequest,
     storage: Annotated[BriefStoragePort, Depends(get_storage)],
-    pipeline: Annotated[BriefGenerationPipeline, Depends(get_pipeline)],
+    pipeline: Annotated[PipelinePort, Depends(get_pipeline)],
 ) -> ChatResponse:
     """Send a message and get the assistant response.
 
@@ -96,7 +97,7 @@ async def send_message(
     return ChatResponse(
         message=assistant_message,
         session_id=session_id,
-        status=session.status.value,
+        status=session.status,
         extracted_data=extracted_data,
     )
 
@@ -106,7 +107,7 @@ async def stream_message(
     session_id: str,
     message: str,
     storage: Annotated[BriefStoragePort, Depends(get_storage)],
-    pipeline: Annotated[BriefGenerationPipeline, Depends(get_pipeline)],
+    pipeline: Annotated[PipelinePort, Depends(get_pipeline)],
 ) -> EventSourceResponse:
     """SSE endpoint for streaming the full pipeline.
 

@@ -11,12 +11,22 @@ from typing import TYPE_CHECKING, cast
 from fastapi import Request  # noqa: TC002
 
 if TYPE_CHECKING:
-    from brief_scout.application.services import BriefGenerationPipeline
-    from brief_scout.application.use_cases import IntakeUseCase
     from brief_scout.domain.models.journey import IntakeJourney
-    from brief_scout.domain.ports.config_port import ConfigurationPort
-    from brief_scout.domain.ports.storage_port import BriefStoragePort
-    from brief_scout.domain.ports.telemetry_port import TelemetryPort
+    from brief_scout.domain.ports import (
+        BriefReader,
+        BriefStoragePort,
+        BriefWriter,
+        CompletenessCheckPort,
+        ConfigurationPort,
+        IntakePort,
+        PipelinePort,
+        ResearchPipelinePort,
+        SessionReader,
+        SessionStoragePort,
+        SessionWriter,
+        SynthesisPort,
+        TelemetryPort,
+    )
     from brief_scout.domain.services import CompletenessChecker
 
 
@@ -35,6 +45,31 @@ def get_storage(request: Request) -> BriefStoragePort:
     return cast("BriefStoragePort", request.app.state.storage)
 
 
+def get_session_reader(request: Request) -> SessionReader:
+    """Provide the session reader port from app.state."""
+    return cast("SessionReader", request.app.state.storage)
+
+
+def get_session_writer(request: Request) -> SessionWriter:
+    """Provide the session writer port from app.state."""
+    return cast("SessionWriter", request.app.state.storage)
+
+
+def get_session_storage(request: Request) -> SessionStoragePort:
+    """Provide the combined session storage port from app.state."""
+    return cast("SessionStoragePort", request.app.state.storage)
+
+
+def get_brief_reader(request: Request) -> BriefReader:
+    """Provide the brief reader port from app.state."""
+    return cast("BriefReader", request.app.state.storage)
+
+
+def get_brief_writer(request: Request) -> BriefWriter:
+    """Provide the brief writer port from app.state."""
+    return cast("BriefWriter", request.app.state.storage)
+
+
 def get_journey(request: Request) -> IntakeJourney:
     """Provide the intake journey from app.state."""
     return cast("IntakeJourney", request.app.state.journey)
@@ -45,11 +80,26 @@ def get_completeness_checker(request: Request) -> CompletenessChecker:
     return cast("CompletenessChecker", request.app.state.completeness_checker)
 
 
-def get_intake_use_case(request: Request) -> IntakeUseCase:
-    """Provide the intake use case from app.state."""
-    return cast("IntakeUseCase", request.app.state.intake_use_case)
+def get_completeness_check_port(request: Request) -> CompletenessCheckPort:
+    """Provide the completeness checker port from app.state."""
+    return cast("CompletenessCheckPort", request.app.state.completeness_checker)
 
 
-def get_pipeline(request: Request) -> BriefGenerationPipeline:
+def get_intake_port(request: Request) -> IntakePort:
+    """Provide the intake port from app.state."""
+    return cast("IntakePort", request.app.state.intake_use_case)
+
+
+def get_research_pipeline_port(request: Request) -> ResearchPipelinePort:
+    """Provide the research pipeline port from app.state."""
+    return cast("ResearchPipelinePort", request.app.state.research_pipeline)
+
+
+def get_synthesis_port(request: Request) -> SynthesisPort:
+    """Provide the synthesis port from app.state."""
+    return cast("SynthesisPort", request.app.state.synthesis_use_case)
+
+
+def get_pipeline(request: Request) -> PipelinePort:
     """Provide the brief generation pipeline from app.state."""
-    return cast("BriefGenerationPipeline", request.app.state.pipeline)
+    return cast("PipelinePort", request.app.state.pipeline)

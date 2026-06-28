@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from brief_scout.domain.errors import LLMCallError
 from brief_scout.domain.models import IntakeData
 from brief_scout.domain.ports.llm_port import Prompt
 from brief_scout.infrastructure.llm.fake_llm_adapter import FakeLLMAdapter
@@ -59,11 +60,13 @@ async def test_demo_turn_ignored_without_path() -> None:
         latency_ms=0.0,
     )
     prompt = Prompt(system="extract", user="conversation")
-    result = await adapter_no_demo.complete_structured(
-        prompt,
-        IntakeData,
-        config={"demo_turn": 3},
-    )
 
-    # Fallback to default empty response
-    assert result.brand_name == ""
+    # Without a demo journey path, demo_turn is ignored and fixture matching runs.
+    # The default fixture has empty content, so structured completion now raises
+    # to stay consistent with real adapters (LSP).
+    with pytest.raises(LLMCallError):
+        await adapter_no_demo.complete_structured(
+            prompt,
+            IntakeData,
+            config={"demo_turn": 3},
+        )

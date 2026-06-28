@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from brief_scout.application.services import DefaultResearchStepRegistry
 from brief_scout.application.services.research_prompt_builder import (
     ResearchPromptBuilder,
 )
@@ -60,11 +61,23 @@ def complete_intake_data() -> IntakeData:
 
 
 @pytest.fixture
-def use_case(config: YAMLConfigAdapter, telemetry: LocalFileTelemetryAdapter) -> ResearchUseCase:
-    """Provide a ResearchUseCase with a mock LLM."""
+def registry(config: YAMLConfigAdapter) -> DefaultResearchStepRegistry:
+    """Provide the default research step registry with a mock LLM."""
     llm = AsyncMock()
     llm.provider_name = "mock"
-    return ResearchUseCase(llm=llm, config=config, telemetry=telemetry)
+    return DefaultResearchStepRegistry(
+        prompts=config.app_config.prompts.research_steps,
+        llm=llm,
+    )
+
+
+@pytest.fixture
+def use_case(
+    registry: DefaultResearchStepRegistry,
+    telemetry: LocalFileTelemetryAdapter,
+) -> ResearchUseCase:
+    """Provide a ResearchUseCase wired to the default registry."""
+    return ResearchUseCase(registry=registry, telemetry=telemetry)
 
 
 class TestResearchUseCase:
@@ -77,7 +90,7 @@ class TestResearchUseCase:
         complete_intake_data: IntakeData,
     ) -> None:
         """execute() should call all 5 research areas and return a bundle."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._registry._llm)
         llm.complete_structured.side_effect = [
             BrandAuditResult(brand_positioning="Nike positioning"),
             CompetitorScanResult(category_creative_patterns="patterns"),
@@ -104,7 +117,7 @@ class TestResearchUseCase:
         complete_intake_data: IntakeData,
     ) -> None:
         """A failed research call should return a default instance."""
-        llm = cast(AsyncMock, use_case._llm)
+        llm = cast(AsyncMock, use_case._registry._llm)
         llm.complete_structured.side_effect = [
             BrandAuditResult(brand_positioning="Nike positioning"),
             CompetitorScanResult(),

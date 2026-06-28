@@ -8,12 +8,10 @@ an underlying LLM port without changing adapter implementations. Enabled in
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from brief_scout.domain.ports.llm_port import LLMResponse, Prompt
-
-T = TypeVar("T", bound=Any)
+    from brief_scout.domain.ports.llm_port import LLMPort, LLMResponse, Prompt, T
 
 
 # Rough per-1M-token pricing (USD) for cost estimates. Update as provider
@@ -118,7 +116,7 @@ class TokenTrackingLLM:
         model: Model name used to pick a tiktoken encoding and pricing.
     """
 
-    def __init__(self, adapter: Any, model: str = "gpt-4o-mini") -> None:
+    def __init__(self, adapter: LLMPort, model: str = "gpt-4o-mini") -> None:
         """Initialize the token-tracking wrapper."""
         self._adapter = adapter
         self._model = model
@@ -160,8 +158,8 @@ class TokenTrackingLLM:
         """Count tokens in a standardized prompt."""
         total = self._count_text(prompt.system) + self._count_text(prompt.user)
         for message in prompt.context:
-            total += self._count_text(str(message.get("role", "")))
-            total += self._count_text(str(message.get("content", "")))
+            total += self._count_text(str(message.role))
+            total += self._count_text(str(message.content))
         return total
 
     def _record(

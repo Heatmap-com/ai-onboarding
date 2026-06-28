@@ -49,6 +49,7 @@ class FakeLLMAdapter:
         repository: FixtureRepository | None = None,
         demo_player: DemoJourneyPlayer | None = None,
         matcher: FixtureMatcher | None = None,
+        **_kwargs: Any,
     ) -> None:
         """Initialize the Fake LLM Adapter.
 
@@ -61,6 +62,7 @@ class FakeLLMAdapter:
             repository: Optional FixtureRepository (used by tests).
             demo_player: Optional DemoJourneyPlayer (used by tests).
             matcher: Optional FixtureMatcher (used by tests).
+            **_kwargs: Ignored generic constructor arguments from the factory.
         """
         self._telemetry = telemetry
         self._repository = repository or FixtureRepository(
@@ -194,14 +196,12 @@ class FakeLLMAdapter:
 
         raw_content = strip_markdown_code_blocks(response_content)
         if not raw_content:
-            try:
-                return output_schema()
-            except Exception as default_exc:
-                raise LLMCallError(
-                    message=f"Failed to create default {output_schema.__name__}: {default_exc}",
-                    provider="fake",
-                    retryable=False,
-                ) from default_exc
+            raise LLMCallError(
+                message=f"Fixture response is empty for {output_schema.__name__}",
+                provider="fake",
+                retryable=False,
+                raw_content=response_content[:500],
+            )
 
         try:
             parsed_data = json.loads(raw_content)

@@ -64,9 +64,8 @@ class ClaudeAdapter(LangChainBaseAdapter):
         """
         messages: list[dict[str, str]] = []
         for ctx in prompt.context:
-            role = ctx.get("role", "user")
-            if role != "system":
-                messages.append({"role": role, "content": ctx["content"]})
+            if ctx.role != "system":
+                messages.append({"role": ctx.role, "content": ctx.content})
         messages.append({"role": "user", "content": prompt.user})
         return messages
 
@@ -76,8 +75,8 @@ class ClaudeAdapter(LangChainBaseAdapter):
         if prompt.system:
             system_parts.append(prompt.system)
         for ctx in prompt.context:
-            if ctx.get("role") == "system":
-                system_parts.append(ctx["content"])
+            if ctx.role == "system":
+                system_parts.append(ctx.content)
         return "\n\n".join(system_parts) if system_parts else None
 
     async def _call_client(

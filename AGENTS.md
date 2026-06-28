@@ -52,6 +52,41 @@ uv run mypy src
 
 Coverage threshold is configured at 85%.
 
+## Ports
+
+All ports live in `src/brief_scout/domain/ports/`. They are plain Python
+`Protocol` classes so adapters satisfy them structurally.
+
+Composite/wide ports:
+
+- `LLMPort` — completion + structured completion.
+- `BriefStoragePort` — brief + session persistence.
+- `SessionStoragePort` — session persistence only.
+- `PipelinePort` — runs the end-to-end brief generation pipeline.
+
+Narrow ports introduced for Agent 1 refactoring:
+
+- `IntakePort` — drive the intake interview (`process_message`).
+- `ResearchPipelinePort` — execute research (`execute`).
+- `SynthesisPort` — synthesize a brief from intake + research.
+- `CompletenessCheckPort` — check whether intake data is complete.
+- `AcknowledgementPort` — generate acknowledgement text.
+- `IntakeDataExtractorPort` — extract structured intake from a message.
+- `SessionReader` / `SessionWriter` — narrow session persistence.
+- `BriefReader` / `BriefWriter` — narrow brief persistence.
+
+The composition root in `src/brief_scout/main.py` stores concrete instances
+on `app.state` under both their concrete and port names (e.g.
+`intake_use_case` and `intake_port`). `src/brief_scout/interfaces/api/dependencies.py`
+provides typed `Depends` callables for each port.
+
+## LLM adapter factory
+
+`LLMAdapterFactory` builds adapters generically from `LLMProviderConfig`.
+All adapters accept the same constructor kwargs (`api_key`, `base_url`,
+`model`, etc.) plus fake-specific extras through `model_extra`. No special-case
+branching for `FakeLLMAdapter` remains.
+
 ## Running the demo
 
 ```bash

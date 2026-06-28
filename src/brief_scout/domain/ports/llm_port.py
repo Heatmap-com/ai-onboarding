@@ -12,9 +12,21 @@ from __future__ import annotations
 
 from typing import Any, Protocol, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 T = TypeVar("T", bound=BaseModel)
+
+
+class ChatMessage(BaseModel):
+    """A single message in the prompt context.
+
+    Attributes:
+        role: Message role, e.g. 'system', 'user', 'assistant'.
+        content: Message text content.
+    """
+
+    role: str = "user"
+    content: str = ""
 
 
 class LLMResponse(BaseModel):
@@ -45,12 +57,29 @@ class Prompt(BaseModel):
     Attributes:
         system: System-level instructions for the LLM.
         user: The user query or task description.
-        context: Optional few-shot examples as list of dicts.
+        context: Optional few-shot examples as list of ChatMessages.
     """
 
     system: str = ""
     user: str = ""
-    context: list[dict[str, str]] = Field(default_factory=list)
+    context: list[ChatMessage] = Field(default_factory=list)
+
+    @field_validator("context", mode="before")
+    @classmethod
+    def _normalize_context(
+        cls,
+        value: list[ChatMessage] | list[dict[str, str]] | None,
+    ) -> list[ChatMessage]:
+        """Accept either ChatMessage objects or legacy dicts for compatibility."""
+        if value is None:
+            return []
+        normalized: list[ChatMessage] = []
+        for item in value:
+            if isinstance(item, dict):
+                normalized.append(ChatMessage(**item))
+            else:
+                normalized.append(item)
+        return normalized
 
 
 class LLMPort(Protocol):

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from brief_scout.domain.ports.brief_storage_port import BriefStoragePort
 from brief_scout.domain.ports.session_lister_port import SessionLister
 from brief_scout.domain.ports.session_storage_port import SessionStoragePort
+from brief_scout.domain.ports.storage_port import BriefStoragePort
 
 if TYPE_CHECKING:
     from brief_scout.domain.models.brief import Brief

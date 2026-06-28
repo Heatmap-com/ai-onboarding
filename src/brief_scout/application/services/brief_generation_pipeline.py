@@ -28,11 +28,13 @@ class PipelineEvent(ResearchPipelineEvent):
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from brief_scout.application.services.research_pipeline import ResearchPipeline
-    from brief_scout.application.use_cases.intake_use_case import IntakeUseCase
-    from brief_scout.application.use_cases.synthesis_use_case import SynthesisUseCase
     from brief_scout.domain.models import ChatSession
-    from brief_scout.domain.ports.storage_port import BriefStoragePort
+    from brief_scout.domain.ports import (
+        BriefStoragePort,
+        IntakePort,
+        ResearchPipelinePort,
+        SynthesisPort,
+    )
 
 
 class BriefGenerationPipeline:
@@ -40,9 +42,9 @@ class BriefGenerationPipeline:
 
     def __init__(
         self,
-        intake_use_case: IntakeUseCase,
-        research_pipeline: ResearchPipeline,
-        synthesis_use_case: SynthesisUseCase,
+        intake_use_case: IntakePort,
+        research_pipeline: ResearchPipelinePort,
+        synthesis_use_case: SynthesisPort,
         storage: BriefStoragePort,
     ) -> None:
         """Initialize the pipeline with injected use cases and storage.

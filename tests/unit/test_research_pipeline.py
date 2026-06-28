@@ -1,4 +1,4 @@
-"""Unit tests for ResearchPipeline and ResearchUseCase helpers."""
+"""Unit tests for ResearchPipeline and research step registry."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from brief_scout.application.services import DefaultResearchStepRegistry
 from brief_scout.application.services.research_pipeline import (
     PipelineEvent,
     ResearchPipeline,
@@ -76,6 +77,28 @@ def complete_intake_data() -> IntakeData:
     )
 
 
+@pytest.fixture
+def registry(
+    config: YAMLConfigAdapter,
+) -> DefaultResearchStepRegistry:
+    """Provide the default research step registry with a mock LLM."""
+    llm = AsyncMock()
+    llm.provider_name = "mock"
+    return DefaultResearchStepRegistry(
+        prompts=config.app_config.prompts.research_steps,
+        llm=llm,
+    )
+
+
+@pytest.fixture
+def use_case(
+    registry: DefaultResearchStepRegistry,
+    telemetry: LocalFileTelemetryAdapter,
+) -> ResearchUseCase:
+    """Provide a ResearchUseCase wired to the default registry."""
+    return ResearchUseCase(registry=registry, telemetry=telemetry)
+
+
 class TestResearchPipeline:
     """Tests for the research pipeline execution and streaming."""
 
@@ -132,75 +155,79 @@ class TestResearchPipeline:
         assert event.payload == {}
 
 
-class TestResearchUseCaseHelpers:
-    """Tests for ResearchUseCase backward-compatible single-call helpers."""
-
-    @pytest.fixture
-    def use_case(
-        self,
-        config: YAMLConfigAdapter,
-        telemetry: LocalFileTelemetryAdapter,
-    ) -> ResearchUseCase:
-        """Provide a ResearchUseCase with a mock LLM."""
-        llm = AsyncMock()
-        llm.provider_name = "mock"
-        return ResearchUseCase(llm=llm, config=config, telemetry=telemetry)
+class TestResearchStepRegistry:
+    """Tests for the default research step registry and step execution."""
 
     @pytest.mark.asyncio
     async def test_call_brand_audit(
-        self, use_case: ResearchUseCase, complete_intake_data: IntakeData
+        self,
+        registry: DefaultResearchStepRegistry,
+        complete_intake_data: IntakeData,
     ) -> None:
-        """_call_brand_audit should return a BrandAuditResult."""
-        llm = use_case._llm
+        """brand_audit step should return a BrandAuditResult."""
+        step = next(s for s in registry.steps if s.name == "brand_audit")
+        llm = registry._llm
         llm.complete_structured.return_value = BrandAuditResult(brand_positioning="Nike")
-        result = await use_case._call_brand_audit(complete_intake_data)
+        result = await step.execute(complete_intake_data)
         assert isinstance(result, BrandAuditResult)
         assert result.brand_positioning == "Nike"
 
     @pytest.mark.asyncio
     async def test_call_competitor_scan(
-        self, use_case: ResearchUseCase, complete_intake_data: IntakeData
+        self,
+        registry: DefaultResearchStepRegistry,
+        complete_intake_data: IntakeData,
     ) -> None:
-        """_call_competitor_scan should return a CompetitorScanResult."""
-        llm = use_case._llm
+        """competitor_scan step should return a CompetitorScanResult."""
+        step = next(s for s in registry.steps if s.name == "competitor_scan")
+        llm = registry._llm
         llm.complete_structured.return_value = CompetitorScanResult(
             category_creative_patterns="patterns",
         )
-        result = await use_case._call_competitor_scan(complete_intake_data)
+        result = await step.execute(complete_intake_data)
         assert isinstance(result, CompetitorScanResult)
 
     @pytest.mark.asyncio
     async def test_call_trend_pulse(
-        self, use_case: ResearchUseCase, complete_intake_data: IntakeData
+        self,
+        registry: DefaultResearchStepRegistry,
+        complete_intake_data: IntakeData,
     ) -> None:
-        """_call_trend_pulse should return a TrendPulseResult."""
-        llm = use_case._llm
+        """trend_pulse step should return a TrendPulseResult."""
+        step = next(s for s in registry.steps if s.name == "trend_pulse")
+        llm = registry._llm
         llm.complete_structured.return_value = TrendPulseResult(category_trends=["trend"])
-        result = await use_case._call_trend_pulse(complete_intake_data)
+        result = await step.execute(complete_intake_data)
         assert isinstance(result, TrendPulseResult)
 
     @pytest.mark.asyncio
     async def test_call_customer_voice(
-        self, use_case: ResearchUseCase, complete_intake_data: IntakeData
+        self,
+        registry: DefaultResearchStepRegistry,
+        complete_intake_data: IntakeData,
     ) -> None:
-        """_call_customer_voice should return a CustomerVoiceResult."""
-        llm = use_case._llm
+        """customer_voice step should return a CustomerVoiceResult."""
+        step = next(s for s in registry.steps if s.name == "customer_voice")
+        llm = registry._llm
         llm.complete_structured.return_value = CustomerVoiceResult(
             customer_language=["love"],
         )
-        result = await use_case._call_customer_voice(complete_intake_data)
+        result = await step.execute(complete_intake_data)
         assert isinstance(result, CustomerVoiceResult)
 
     @pytest.mark.asyncio
     async def test_call_hook_mining(
-        self, use_case: ResearchUseCase, complete_intake_data: IntakeData
+        self,
+        registry: DefaultResearchStepRegistry,
+        complete_intake_data: IntakeData,
     ) -> None:
-        """_call_hook_mining should return a HookMiningResult."""
-        llm = use_case._llm
+        """hook_mining step should return a HookMiningResult."""
+        step = next(s for s in registry.steps if s.name == "hook_mining")
+        llm = registry._llm
         llm.complete_structured.return_value = HookMiningResult(
             proven_hook_types=["hook"],
         )
-        result = await use_case._call_hook_mining(complete_intake_data)
+        result = await step.execute(complete_intake_data)
         assert isinstance(result, HookMiningResult)
 
     def test_build_pipeline_requires_all_steps(self, use_case: ResearchUseCase) -> None:
@@ -215,9 +242,9 @@ class TestResearchUseCaseHelpers:
             "hook_mining",
         }
 
-    def test_step_templates_are_prompt_configs(self, use_case: ResearchUseCase) -> None:
+    def test_step_templates_are_prompt_configs(self, config: YAMLConfigAdapter) -> None:
         """Each configured step template should be a PromptTemplateConfig."""
-        prompts = use_case._config.app_config.prompts.research_steps
+        prompts = config.app_config.prompts.research_steps
         for name in (
             "brand_audit",
             "competitor_scan",

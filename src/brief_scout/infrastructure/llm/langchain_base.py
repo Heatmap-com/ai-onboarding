@@ -2,9 +2,6 @@
 
 Centralizes provider-agnostic concerns:
   - config merging
-  - JSON instruction injection
-  - schema description
-  - structured-output parsing
   - standardized metadata shaping
   - error classification
 
@@ -17,16 +14,20 @@ Concrete adapters only provide:
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from brief_scout.domain.errors import LLMCallError
 from brief_scout.domain.ports.llm_port import LLMResponse, Prompt
 from brief_scout.domain.ports.telemetry_port import LogLevel
+from brief_scout.infrastructure.llm.json_instruction_injector import (
+    JsonInstructionInjector,
+)
+from brief_scout.infrastructure.llm.response_parser import ResponseParser
+from brief_scout.infrastructure.llm.schema_describer import SchemaDescriber
 
 if TYPE_CHECKING:
     from brief_scout.domain.ports.logger_port import LoggerPort
@@ -54,6 +55,8 @@ class LangChainBaseAdapter(ABC):
         max_tokens: int = 2000,
         timeout_seconds: float = 60.0,
         telemetry: Any = None,
+        json_injector: JsonInstructionInjector | None = None,
+        response_parser: ResponseParser | None = None,
     ) -> None:
         """Initialize the base adapter.
 
@@ -66,6 +69,8 @@ class LangChainBaseAdapter(ABC):
             max_tokens: Max completion tokens.
             timeout_seconds: Request timeout.
             telemetry: Optional telemetry/logger port.
+            json_injector: Optional JSON instruction injector.
+            response_parser: Optional structured response parser.
         """
         self._provider_name = provider_name
         self._api_key = api_key
@@ -76,6 +81,8 @@ class LangChainBaseAdapter(ABC):
         self._timeout = timeout_seconds
         self._telemetry: LoggerPort | None = telemetry
         self._client: Any | None = None
+        self._json_injector = json_injector or JsonInstructionInjector()
+        self._response_parser = response_parser or ResponseParser()
 
     @property
     def provider_name(self) -> str:
@@ -109,7 +116,7 @@ class LangChainBaseAdapter(ABC):
 
     @abstractmethod
     def _extract_model(self, response: Any) -> str:
-        """Extract the model identifier from the raw response."""
+        """Extract the model identifier from the response."""
         ...
 
     @abstractmethod
@@ -161,16 +168,17 @@ class LangChainBaseAdapter(ABC):
             latency_ms = (time.perf_counter() - start) * 1000
 
             usage = self._extract_usage(response)
+            model_used = self._extract_model(response)
             result = LLMResponse(
                 content=self._extract_content(response),
-                model_used=self._extract_model(response),
+                model_used=model_used,
                 provider=self._provider_name,
                 tokens_used=usage.get("total_tokens", 0),
                 latency_ms=latency_ms,
                 finish_reason=self._extract_finish_reason(response),
                 metadata={
                     "provider": self._provider_name,
-                    "model": self._extract_model(response),
+                    "model": model_used,
                     "tokens_used": usage.get("total_tokens", 0),
                     "latency_ms": latency_ms,
                     "provider_metadata": self._build_provider_metadata(response),
@@ -199,20 +207,32 @@ class LangChainBaseAdapter(ABC):
         config: dict[str, Any] | None = None,
     ) -> T:
         """Execute completion with structured JSON output."""
-        json_prompt = self._inject_json_instructions(prompt, output_schema)
+        json_prompt = self._json_injector.inject(prompt, output_schema)
         response = await self.complete(json_prompt, config)
+        return self._response_parser.parse(
+            response.content,
+            output_schema,
+            provider=self._provider_name,
+        )
 
-        try:
-            content = self._strip_markdown_code_blocks(response.content)
-            data = json.loads(content)
-            return output_schema.model_validate(data)
-        except (json.JSONDecodeError, ValidationError) as exc:
-            raise LLMCallError(
-                f"Failed to parse structured output: {exc}",
-                provider=self._provider_name,
-                retryable=False,
-                raw_content=response.content[:500],
-            ) from exc
+    def _inject_json_instructions(
+        self,
+        prompt: Prompt,
+        schema: type[BaseModel],
+    ) -> Prompt:
+        """Add JSON formatting instructions to the system prompt.
+
+        Deprecated: prefer ``JsonInstructionInjector.inject`` directly.
+        """
+        return self._json_injector.inject(prompt, schema)
+
+    @staticmethod
+    def _describe_schema(schema: type[BaseModel]) -> str:
+        """Generate a human-readable description of a Pydantic schema.
+
+        Deprecated: prefer ``SchemaDescriber.describe`` directly.
+        """
+        return SchemaDescriber().describe(schema)
 
     def _merge_config(self, override: dict[str, Any] | None) -> dict[str, Any]:
         """Merge override config with defaults."""
@@ -225,46 +245,6 @@ class LangChainBaseAdapter(ABC):
         if override:
             base.update(override)
         return base
-
-    def _inject_json_instructions(
-        self,
-        prompt: Prompt,
-        schema: type[BaseModel],
-    ) -> Prompt:
-        """Add JSON formatting instructions to the system prompt."""
-        schema_desc = self._describe_schema(schema)
-        json_instruction = (
-            f"\n\nYou must respond with ONLY a valid JSON object matching "
-            f"this schema. No prose, no markdown, no code blocks. "
-            f"The JSON fields are: {schema_desc}"
-        )
-        return Prompt(
-            system=prompt.system + json_instruction,
-            user=prompt.user,
-            context=prompt.context,
-        )
-
-    @staticmethod
-    def _describe_schema(schema: type[BaseModel]) -> str:
-        """Generate a human-readable description of a Pydantic schema."""
-        fields = []
-        for name, info in schema.model_fields.items():
-            annotation = info.annotation
-            type_name = getattr(annotation, "__name__", str(annotation))
-            fields.append(f"{name} ({type_name})")
-        return ", ".join(fields)
-
-    @staticmethod
-    def _strip_markdown_code_blocks(content: str) -> str:
-        """Remove markdown code fences from JSON content."""
-        text = content.strip()
-        if text.startswith("```json"):
-            text = text[7:]
-        elif text.startswith("```"):
-            text = text[3:]
-        if text.endswith("```"):
-            text = text[:-3]
-        return text.strip()
 
     def _handle_error(
         self,

@@ -15,7 +15,7 @@ import pytest
 from pydantic import BaseModel
 
 from brief_scout.domain.errors import LLMCallError
-from brief_scout.domain.ports.llm_port import LLMResponse, Prompt
+from brief_scout.domain.ports.llm_port import ChatMessage, LLMResponse, Prompt
 from brief_scout.infrastructure.llm.kimi_adapter import KimiAdapter
 
 # ---------------------------------------------------------------------------
@@ -853,7 +853,7 @@ class TestKimiAdapterInjectJson:
         result = adapter._inject_json_instructions(prompt, _TestBrandResult)
 
         assert result.user == "Extract data."
-        assert result.context == [{"role": "user", "content": "Context."}]
+        assert result.context == [ChatMessage(role="user", content="Context.")]
 
     def test_inject_json_includes_schema_fields(self, adapter: KimiAdapter) -> None:
         """JSON instructions should mention schema field names."""

@@ -14,7 +14,7 @@ import pytest
 from pydantic import BaseModel
 
 from brief_scout.domain.errors import LLMCallError
-from brief_scout.domain.ports.llm_port import LLMResponse, Prompt
+from brief_scout.domain.ports.llm_port import ChatMessage, LLMResponse, Prompt
 from brief_scout.infrastructure.llm.openai_adapter import OpenAIAdapter
 
 # ---------------------------------------------------------------------------
@@ -290,7 +290,7 @@ class TestInjectJsonInstructions:
         result = adapter._inject_json_instructions(prompt, _TestSimpleOutput)
 
         assert result.user == "User"
-        assert result.context == [{"role": "assistant", "content": "ctx"}]
+        assert result.context == [ChatMessage(role="assistant", content="ctx")]
 
     def test_should_describe_schema_in_instruction(self, adapter: OpenAIAdapter) -> None:
         """The JSON instruction should include schema field descriptions."""

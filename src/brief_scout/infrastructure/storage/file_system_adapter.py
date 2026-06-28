@@ -28,9 +28,9 @@ from pydantic import ValidationError
 
 from brief_scout.domain.models.brief import Brief
 from brief_scout.domain.models.intake import ChatSession
-from brief_scout.domain.ports.brief_storage_port import BriefStoragePort
 from brief_scout.domain.ports.session_lister_port import SessionLister
 from brief_scout.domain.ports.session_storage_port import SessionStoragePort
+from brief_scout.domain.ports.storage_port import BriefStoragePort
 from brief_scout.domain.ports.telemetry_port import LogLevel
 
 if TYPE_CHECKING:

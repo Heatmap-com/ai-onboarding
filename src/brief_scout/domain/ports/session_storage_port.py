@@ -1,4 +1,4 @@
-"""Session storage port — contract for chat session persistence."""
+"""Session storage port — narrow read/write contracts."""
 
 from __future__ import annotations
 
@@ -8,24 +8,23 @@ if TYPE_CHECKING:
     from brief_scout.domain.models.intake import ChatSession
 
 
-class SessionStoragePort(Protocol):
-    """Port for chat session persistence."""
-
-    async def save_session(self, session: ChatSession) -> None:
-        """Save a chat session.
-
-        Args:
-            session: The ChatSession to persist.
-        """
-        ...
+class SessionReader(Protocol):
+    """Narrow port for loading chat sessions."""
 
     async def get_session(self, session_id: str) -> ChatSession | None:
-        """Retrieve a chat session by ID.
-
-        Args:
-            session_id: The unique session identifier.
-
-        Returns:
-            The ChatSession if found, None otherwise.
-        """
+        """Return the session if it exists, otherwise None."""
         ...
+
+
+class SessionWriter(Protocol):
+    """Narrow port for saving chat sessions."""
+
+    async def save_session(self, session: ChatSession) -> None:
+        """Persist the chat session."""
+        ...
+
+
+class SessionStoragePort(SessionReader, SessionWriter, Protocol):
+    """Combined narrow port for session persistence."""
+
+    ...

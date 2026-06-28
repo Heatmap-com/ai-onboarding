@@ -256,23 +256,17 @@ class TestFakeLLMAdapter:
             await adapter.complete_structured(prompt, _TestBrandResult)
 
     @pytest.mark.asyncio
-    async def test_should_raise_on_default_instantiation_failure(self, tmp_path: Path) -> None:
-        """complete_structured() should raise LLMCallError if default instantiation fails."""
+    async def test_should_raise_on_empty_response_in_structured(self, tmp_path: Path) -> None:
+        """complete_structured() should raise LLMCallError on empty fixture content."""
         bad_dir = tmp_path / "bad_fixtures3"
         bad_dir.mkdir()
-        (bad_dir / "bad.json").write_text(
-            json.dumps({"_meta": {"match_keywords": ["bad"]}, "response": "not json"})
+        (bad_dir / "empty.json").write_text(
+            json.dumps({"_meta": {"match_keywords": ["empty"]}, "response": ""})
         )
         adapter = FakeLLMAdapter(fixture_dir=str(bad_dir), default_fixture="default")
-
-        class BrokenModel(BaseModel):
-            """Model that cannot be instantiated without required args."""
-
-            name: str  # no default
-
-        prompt = Prompt(user="bad")
+        prompt = Prompt(user="empty")
         with pytest.raises(LLMCallError):
-            await adapter.complete_structured(prompt, BrokenModel)
+            await adapter.complete_structured(prompt, _TestBrandResult)
 
     def test_provider_name(self) -> None:
         """provider_name should return 'fake'."""
