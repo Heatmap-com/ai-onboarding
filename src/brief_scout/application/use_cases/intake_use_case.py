@@ -15,7 +15,7 @@ from jinja2 import Template
 from pydantic import BaseModel, Field
 
 from brief_scout.domain.errors import BriefScoutError, LLMCallError
-from brief_scout.domain.models import ChatMessage, ChatSession, IntakeData
+from brief_scout.domain.models import ChatMessage, ChatSession, IntakeData, Status
 from brief_scout.domain.ports import Prompt, TelemetryEvent
 
 if TYPE_CHECKING:
@@ -135,7 +135,7 @@ class IntakeUseCase:
 
         # Step 4: Check completeness for telemetry
         completeness_result = self._completeness_checker.check(merged)
-        session.status = "intaking"
+        session.status = Status.INTAKING
 
         # Step 5: Determine next action
         next_field = self._journey.next_field(
@@ -150,7 +150,7 @@ class IntakeUseCase:
             is_complete = False
         else:
             assistant_message = self._journey.render_researching_message(merged)
-            session.status = "researching"
+            session.status = Status.RESEARCHING
             is_complete = True
 
         session.messages.append(

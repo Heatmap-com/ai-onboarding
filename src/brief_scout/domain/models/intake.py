@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class Status(StrEnum):
+    """Pipeline status for a chat session."""
+
+    INTAKING = "intaking"
+    RESEARCHING = "researching"
+    SYNTHESIZING = "synthesizing"
+    COMPLETE = "complete"
 
 
 class CreativeDirections(BaseModel):
@@ -89,5 +99,5 @@ class ChatSession(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     intake_data: IntakeData = Field(default_factory=IntakeData)
     asked_optional_questions: list[str] = Field(default_factory=list)
-    status: Literal["intaking", "researching", "synthesizing", "complete"] = "intaking"
+    status: Status = Status.INTAKING
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

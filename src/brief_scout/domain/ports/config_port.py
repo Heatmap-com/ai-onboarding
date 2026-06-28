@@ -1,8 +1,14 @@
-"""Configuration Port — contract for configuration loading and access.
+"""Configuration Port — composite contract for configuration access.
 
-Adapters implementing this Protocol handle the mechanics of loading
-configuration from files, environment variables, or remote sources.
-The domain layer consumes configuration through this clean interface.
+This module now composes the narrow configuration ports:
+  - AppConfigProvider
+  - ProviderConfigSource
+  - PromptTemplateProvider
+  - ReloadableConfig
+
+Adapters implementing ConfigurationPort must satisfy all four narrow
+contracts. The composite remains convenient for composition-root wiring;
+read-only clients should depend on the narrow ports instead.
 """
 
 from __future__ import annotations
@@ -14,43 +20,28 @@ if TYPE_CHECKING:
 
 
 class ConfigurationPort(Protocol):
-    """Port for configuration loading and access.
+    """Composite port for configuration loading and access.
 
     Implementations handle YAML parsing, environment variable
     interpolation, and deep merge of configuration overlays.
+
+    This composite extends the narrow configuration ports. It is intended
+    for composition-root wiring only; depend on AppConfigProvider,
+    ProviderConfigSource, PromptTemplateProvider, or ReloadableConfig in
+    application/domain code.
     """
 
     @property
     def app_config(self) -> AppConfig:
-        """Return the validated application configuration.
-
-        Returns:
-            The root AppConfig Pydantic model with all settings validated.
-        """
+        """Return the validated application configuration."""
         ...
 
     def get_provider_config(self, provider_name: str) -> LLMProviderConfig:
-        """Get configuration for a specific LLM provider.
-
-        Args:
-            provider_name: The provider identifier (e.g., 'fake', 'openai').
-
-        Returns:
-            The LLMProviderConfig for the named provider.
-
-        Raises:
-            KeyError: If the provider is not configured.
-        """
+        """Get configuration for a specific LLM provider."""
         ...
 
     def get_prompt_template(self, template_name: str) -> PromptTemplateConfig:
         """Get a prompt template by name.
-
-        Args:
-            template_name: The template identifier (e.g., 'research_brand_audit').
-
-        Returns:
-            The PromptTemplateConfig with system and user strings.
 
         Raises:
             KeyError: If the template is not found.
@@ -60,7 +51,8 @@ class ConfigurationPort(Protocol):
     def reload(self) -> None:
         """Reload configuration from source.
 
-        Used for hot-reload scenarios where configuration files
-        have changed and need to be re-read.
+        The contract is eager: after this method returns, the next read
+        must reflect the latest source state. Any source errors propagate
+        as ConfigError or a subclass.
         """
         ...

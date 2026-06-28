@@ -289,10 +289,11 @@ class TestKimiAdapterComplete:
         assert response.tokens_used == 10
         assert response.finish_reason == "stop"
         assert response.latency_ms >= 0
-        assert "prompt_tokens" in response.metadata
-        assert "completion_tokens" in response.metadata
-        assert response.metadata["prompt_tokens"] == 5
-        assert response.metadata["completion_tokens"] == 5
+        provider_metadata = response.metadata["provider_metadata"]
+        assert "prompt_tokens" in provider_metadata
+        assert "completion_tokens" in provider_metadata
+        assert provider_metadata["prompt_tokens"] == 5
+        assert provider_metadata["completion_tokens"] == 5
 
     @pytest.mark.asyncio
     async def test_complete_with_no_system_prompt(
@@ -410,8 +411,8 @@ class TestKimiAdapterComplete:
         response = await adapter.complete(prompt)
 
         assert response.tokens_used == 0
-        assert response.metadata["prompt_tokens"] == 0
-        assert response.metadata["completion_tokens"] == 0
+        assert response.metadata["provider_metadata"]["prompt_tokens"] == 0
+        assert response.metadata["provider_metadata"]["completion_tokens"] == 0
 
     @pytest.mark.asyncio
     async def test_complete_response_with_empty_content(
@@ -454,7 +455,7 @@ class TestKimiAdapterComplete:
 
         response = await adapter.complete(prompt)
 
-        assert response.metadata["base_url"] == KimiAdapter.DEFAULT_BASE_URL
+        assert response.metadata["provider_metadata"]["base_url"] == KimiAdapter.DEFAULT_BASE_URL
 
 
 # ============================================================================
@@ -495,7 +496,7 @@ class TestKimiAdapterCompleteErrors:
         with pytest.raises(LLMCallError) as exc_info:
             await adapter.complete(prompt)
 
-        assert "Kimi API error" in str(exc_info.value)
+        assert "kimi API error" in str(exc_info.value)
         assert exc_info.value.provider == "kimi"
         assert exc_info.value.retryable is False  # 401 is not retryable
 

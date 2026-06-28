@@ -13,6 +13,8 @@ import yaml
 
 from brief_scout.domain.errors import ConfigError
 from brief_scout.domain.models.config import AppConfig, LLMProviderConfig
+from brief_scout.infrastructure.config.config_merger import ConfigMerger
+from brief_scout.infrastructure.config.env_interpolator import EnvInterpolator
 from brief_scout.infrastructure.config.yaml_config_adapter import YAMLConfigAdapter
 
 
@@ -125,12 +127,12 @@ class TestYAMLConfigAdapter:
         assert "{brand_name}" in template.user
 
     def test_should_get_string_prompt_template(self, config_dir: Path) -> None:
-        """get_prompt_template should return empty system/user for string prompts."""
+        """get_prompt_template should wrap string prompts into system/user."""
         adapter = YAMLConfigAdapter(config_dir=str(config_dir), env="test")
         template = adapter.get_prompt_template("extraction_system")
 
         assert template.system == ""
-        assert template.user == ""
+        assert template.user == "Extract: {{schema}}"
 
     def test_should_raise_for_unknown_prompt_template(self, config_dir: Path) -> None:
         """get_prompt_template should raise KeyError for unknown templates."""
@@ -171,19 +173,17 @@ class TestYAMLConfigAdapter:
         cfg = adapter.app_config
         assert cfg.app_name == "Test App"
 
-    def test_deep_merge_replaces_non_dict_values(self, config_dir: Path) -> None:
+    def test_deep_merge_replaces_non_dict_values(self) -> None:
         """Deep merge should replace non-dict leaf values."""
-        adapter = YAMLConfigAdapter(config_dir=str(config_dir), env="test")
-        merged = adapter._deep_merge({"a": {"b": 1}}, {"a": {"b": 2}})
+        merger = ConfigMerger()
+        merged = merger.merge({"a": {"b": 1}}, {"a": {"b": 2}})
         assert merged == {"a": {"b": 2}}
 
-    def test_interpolate_env_vars_recursively(
-        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_interpolate_env_vars_recursively(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Interpolation should handle nested dicts and lists."""
         monkeypatch.setenv("TEST_KEY", "test_value")
-        adapter = YAMLConfigAdapter(config_dir=str(config_dir), env="test")
-        result = adapter._interpolate_env_vars(
+        interpolator = EnvInterpolator()
+        result = interpolator.interpolate(
             {"a": "${TEST_KEY}", "b": ["${TEST_KEY}"], "c": {"d": "${TEST_KEY}"}}
         )
         assert result == {"a": "test_value", "b": ["test_value"], "c": {"d": "test_value"}}

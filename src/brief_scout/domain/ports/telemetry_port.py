@@ -1,8 +1,14 @@
-"""Telemetry Port — contract for logging, metrics, and tracing.
+"""Telemetry Port — composite contract for logging, metrics, and tracing.
 
-Adapters implementing this Protocol handle the mechanics of recording
-observability data: structured logs, telemetry events, and distributed
-tracing spans. The domain layer depends only on this interface.
+This module now composes the narrow telemetry ports:
+  - LoggerPort
+  - EventRecorder
+  - SpanContext
+  - CorrelationContext
+
+Adapters implementing TelemetryPort must satisfy all four narrow contracts.
+The composite remains convenient for composition-root wiring; application
+and domain code should depend on the narrow ports instead.
 """
 
 from __future__ import annotations
@@ -46,10 +52,14 @@ class TelemetryEvent(BaseModel):
 
 
 class TelemetryPort(Protocol):
-    """Port for logging, metrics, and tracing.
+    """Composite port for logging, metrics, and tracing.
 
     Implementations may write to local files, stdout, OpenTelemetry
     collectors, or any other observability backend.
+
+    This composite extends the narrow telemetry ports. It is intended for
+    composition-root wiring only; depend on LoggerPort, EventRecorder,
+    SpanContext, or CorrelationContext in application/domain code.
     """
 
     def log(
@@ -60,19 +70,14 @@ class TelemetryPort(Protocol):
     ) -> None:
         """Log a structured message.
 
-        Args:
-            message: The human-readable log message.
-            level: Severity level (default INFO).
-            **kwargs: Additional structured data to include.
+        The composite port accepts both ``LogLevel`` and plain strings for
+        backward compatibility with legacy call sites. New code should pass
+        ``LogLevel`` values.
         """
         ...
 
     def record_event(self, event: TelemetryEvent) -> None:
-        """Record a structured telemetry event.
-
-        Args:
-            event: The TelemetryEvent to record.
-        """
+        """Record a structured telemetry event."""
         ...
 
     def start_span(
@@ -81,39 +86,21 @@ class TelemetryPort(Protocol):
         correlation_id: str = "",
         **kwargs: Any,
     ) -> str:
-        """Start a tracing span.
-
-        Args:
-            name: Descriptive name for the span.
-            correlation_id: Optional correlation ID for the trace.
-            **kwargs: Additional span attributes.
-
-        Returns:
-            A unique span identifier.
-        """
+        """Start a tracing span."""
         ...
 
     def end_span(self, span_id: str, **kwargs: Any) -> None:
         """End a tracing span.
 
-        Args:
-            span_id: The span identifier returned by start_span.
-            **kwargs: Additional data to include at span end.
+        The contract is forgiving: ending an unknown span_id is a no-op
+        (implementations may log a warning but must not raise).
         """
         ...
 
     def get_correlation_id(self) -> str:
-        """Get the current correlation ID from context.
-
-        Returns:
-            The active correlation ID or empty string if none set.
-        """
+        """Get the current correlation ID from context."""
         ...
 
     def set_correlation_id(self, correlation_id: str) -> None:
-        """Set the correlation ID in the current context.
-
-        Args:
-            correlation_id: The correlation ID to set.
-        """
+        """Set the correlation ID in the current context."""
         ...

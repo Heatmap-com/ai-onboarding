@@ -1,46 +1,35 @@
 """Local File Telemetry Adapter — structured JSON logs to local files.
 
-Writes structured log entries as JSON Lines (JSONL) to daily log files.
-Uses Python contextvars for correlation ID tracking across async boundaries.
+Composes smaller collaborators:
+  - JsonlWriter for daily JSON Lines file I/O.
+  - SpanStore for in-memory span tracking.
 
-Log file naming convention:
-    ``{log_dir}/brief_scout_YYYY-MM-DD.jsonl``
-
-Each line is a JSON object with timestamp, level, message, correlation_id,
-and arbitrary structured data.
-
-Example log entry::
-
-    {
-        "timestamp": "2026-01-15T09:30:00.123456",
-        "level": "INFO",
-        "message": "Intake completeness check completed",
-        "correlation_id": "abc-123-def",
-        "data": {"is_complete": true, "confidence": 0.85}
-    }
+Implements the narrow telemetry ports (LoggerPort, EventRecorder,
+SpanContext, CorrelationContext) as well as the composite TelemetryPort.
 """
 
 from __future__ import annotations
 
-import json
-import threading
 import uuid
 from contextvars import ContextVar
-from datetime import UTC, date, datetime
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from brief_scout.domain.ports.telemetry_port import (
     LogLevel,
     TelemetryEvent,
-    TelemetryPort,
 )
+
+if TYPE_CHECKING:
+    from pathlib import Path
+from brief_scout.infrastructure.telemetry.jsonl_writer import JsonlWriter
+from brief_scout.infrastructure.telemetry.span_store import SpanStore
 
 # Context variable for correlation ID tracking across async boundaries
 _correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
 
 
-class LocalFileTelemetryAdapter(TelemetryPort):
+class LocalFileTelemetryAdapter:
     """Writes structured JSON logs to local files.
 
     One log file per day. Correlation IDs are tracked via contextvars
@@ -61,22 +50,22 @@ class LocalFileTelemetryAdapter(TelemetryPort):
 
     def __init__(
         self,
-        log_dir: str = "./logs",
+        log_dir: str | Path = "./logs",
         log_level: str = "INFO",
+        writer: JsonlWriter | None = None,
+        span_store: SpanStore | None = None,
     ) -> None:
         """Initialize the local file telemetry adapter.
 
-        Creates the log directory if it doesn't exist.
-
         Args:
             log_dir: Directory path for log files.
-            log_level: Minimum level to log (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+            log_level: Minimum level to log.
+            writer: Optional JsonlWriter instance.
+            span_store: Optional SpanStore instance.
         """
-        self._log_dir = Path(log_dir)
-        self._log_dir.mkdir(parents=True, exist_ok=True)
+        self._writer = writer or JsonlWriter(log_dir)
         self._min_level = LogLevel(log_level.upper())
-        self._spans: dict[str, dict[str, Any]] = {}
-        self._spans_lock = threading.Lock()
+        self._span_store = span_store or SpanStore()
 
     def log(
         self,
@@ -88,33 +77,25 @@ class LocalFileTelemetryAdapter(TelemetryPort):
 
         Args:
             message: Human-readable log message.
-            level: Severity level of the message.
+            level: Severity level of the message (LogLevel preferred).
             **kwargs: Additional structured data to include.
         """
         level_enum = LogLevel(level.upper()) if isinstance(level, str) else level
         if self._LEVEL_ORDER[level_enum] < self._LEVEL_ORDER[self._min_level]:
             return
 
-        level_str = level_enum.value
         entry = {
             "timestamp": datetime.now(UTC).isoformat(),
-            "level": level_str,
+            "level": level_enum.value,
             "message": message,
             "correlation_id": self.get_correlation_id(),
             "data": kwargs,
         }
 
-        self._write_entry(entry)
+        self._writer.write(entry)
 
     def record_event(self, event: TelemetryEvent) -> None:
-        """Record a structured telemetry event.
-
-        Events are written as JSON log entries with the event data
-        nested under the ``data`` key.
-
-        Args:
-            event: The TelemetryEvent to record.
-        """
+        """Record a structured telemetry event."""
         if self._LEVEL_ORDER.get(event.level, 0) < self._LEVEL_ORDER[self._min_level]:
             return
 
@@ -129,7 +110,7 @@ class LocalFileTelemetryAdapter(TelemetryPort):
             },
         }
 
-        self._write_entry(entry)
+        self._writer.write(entry)
 
     def start_span(
         self,
@@ -139,11 +120,12 @@ class LocalFileTelemetryAdapter(TelemetryPort):
     ) -> str:
         """Start a tracing span.
 
-        Spans are stored in memory and logged at completion.
+        This method does NOT mutate the active correlation ID. Callers must
+        explicitly use set_correlation_id if they want to change context.
 
         Args:
             name: Descriptive name for the span.
-            correlation_id: Optional correlation ID for the trace.
+            correlation_id: Optional correlation ID stored with the span.
             **kwargs: Additional span attributes.
 
         Returns:
@@ -151,9 +133,6 @@ class LocalFileTelemetryAdapter(TelemetryPort):
         """
         span_id = str(uuid.uuid4())
         cid = correlation_id or self.get_correlation_id()
-
-        if cid:
-            self.set_correlation_id(cid)
 
         span_data = {
             "span_id": span_id,
@@ -163,10 +142,8 @@ class LocalFileTelemetryAdapter(TelemetryPort):
             "attributes": kwargs,
         }
 
-        with self._spans_lock:
-            self._spans[span_id] = span_data
+        self._span_store.add(span_id, span_data)
 
-        # Log span start
         self.log(
             message=f"Span started: {name}",
             level=LogLevel.DEBUG,
@@ -179,12 +156,13 @@ class LocalFileTelemetryAdapter(TelemetryPort):
     def end_span(self, span_id: str, **kwargs: Any) -> None:
         """End a tracing span and log its completion.
 
+        Ending an unknown span_id is a no-op after logging a warning.
+
         Args:
             span_id: The span identifier returned by start_span.
             **kwargs: Additional data to include at span end.
         """
-        with self._spans_lock:
-            span_data = self._spans.pop(span_id, None)
+        span_data = self._span_store.remove(span_id)
 
         if span_data is None:
             self.log(
@@ -207,40 +185,20 @@ class LocalFileTelemetryAdapter(TelemetryPort):
         )
 
     def get_correlation_id(self) -> str:
-        """Get the current correlation ID from context.
-
-        Returns:
-            The active correlation ID or empty string if none is set.
-        """
+        """Get the current correlation ID from context."""
         return _correlation_id_var.get("")
 
     def set_correlation_id(self, correlation_id: str) -> None:
-        """Set the correlation ID in the current context.
-
-        Uses a contextvar so the ID propagates correctly across
-        async task boundaries.
-
-        Args:
-            correlation_id: The correlation ID to set.
-        """
+        """Set the correlation ID in the current context."""
         _correlation_id_var.set(correlation_id)
 
-    def _write_entry(self, entry: dict[str, Any]) -> None:
-        """Write a log entry to the current day's log file.
+    # Backward-compatible accessors for existing tests
+    @property
+    def _log_dir(self) -> Path:
+        """Return the log directory (deprecated, use writer)."""
+        return self._writer._log_dir
 
-        Args:
-            entry: The structured log entry dictionary.
-        """
-        log_file = self._log_dir / f"brief_scout_{date.today().isoformat()}.jsonl"
-
-        try:
-            with open(log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, default=str) + "\n")
-        except OSError as exc:
-            # Fallback to stderr if file write fails
-            import sys
-
-            print(
-                f"Failed to write log entry: {exc}",
-                file=sys.stderr,
-            )
+    @property
+    def _spans(self) -> dict[str, dict[str, Any]]:
+        """Return the span store contents (deprecated, use span_store)."""
+        return dict(self._span_store._spans)

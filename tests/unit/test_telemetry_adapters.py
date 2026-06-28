@@ -126,8 +126,8 @@ class TestLocalFileTelemetryAdapter:
     def test_should_log_event_with_correlation_id(
         self, telemetry: LocalFileTelemetryAdapter
     ) -> None:
-        """start_span should set correlation id and propagate to logs."""
-        telemetry.start_span("test", correlation_id="corr-xyz")
+        """set_correlation_id should propagate to logs."""
+        telemetry.set_correlation_id("corr-xyz")
         telemetry.log("message with cid")
 
         entries = self._read_log_file(telemetry)
