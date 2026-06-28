@@ -7,9 +7,11 @@ and message exchange between the interface and application layers.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
+
+from brief_scout.domain.models.intake import Status
 
 
 class MessageRequest(BaseModel):
@@ -30,13 +32,13 @@ class ChatResponse(BaseModel):
     Attributes:
         message: The assistant's reply text.
         session_id: The session identifier.
-        status: Current pipeline status (intaking, researching, synthesizing, complete).
+        status: Current pipeline status.
         extracted_data: Structured data extracted from the conversation so far.
     """
 
     message: str
     session_id: str
-    status: Literal["intaking", "researching", "synthesizing", "complete"] = "intaking"
+    status: Status = Status.INTAKING
     extracted_data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -50,5 +52,5 @@ class SessionResponse(BaseModel):
     """
 
     session_id: str
-    status: str
+    status: Status = Status.INTAKING
     created_at: datetime

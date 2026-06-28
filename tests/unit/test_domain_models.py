@@ -9,14 +9,13 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-import pytest
-
 from brief_scout.domain.models.brief import Brief, BriefSection, CreativeAngle
 from brief_scout.domain.models.intake import (
     ChatMessage,
     ChatSession,
     CreativeDirections,
     IntakeData,
+    Status,
 )
 from brief_scout.domain.models.research import (
     BrandAuditResult,
@@ -34,105 +33,7 @@ from brief_scout.domain.models.research import (
 
 
 class TestIntakeData:
-    """Test the IntakeData model — completeness checking, scoring, defaults."""
-
-    def test_is_complete_with_all_fields(self) -> None:
-        """All required fields present → is_complete should be True."""
-        data = IntakeData(
-            first_name="Alex",
-            brand_name="Nike",
-            competitors=["Adidas", "Puma"],
-            primary_goal="new customer acquisition",
-            target_customer="18-34 athletes",
-        )
-        assert data.is_complete is True
-
-    def test_is_complete_missing_competitors(self) -> None:
-        """Missing competitors → is_complete should be False."""
-        data = IntakeData(
-            first_name="Alex",
-            brand_name="Nike",
-            competitors=[],  # empty!
-            primary_goal="new customer acquisition",
-            target_customer="18-34 athletes",
-        )
-        assert data.is_complete is False
-
-    def test_is_complete_empty(self) -> None:
-        """Default-constructed IntakeData → is_complete should be False."""
-        data = IntakeData()
-        assert data.is_complete is False
-
-    def test_is_complete_missing_brand_name(self) -> None:
-        """Empty brand_name → is_complete should be False."""
-        data = IntakeData(
-            first_name="Alex",
-            brand_name="",
-            competitors=["Adidas"],
-            primary_goal="acquisition",
-            target_customer="athletes",
-        )
-        assert data.is_complete is False
-
-    def test_is_complete_missing_goal(self) -> None:
-        """Empty primary_goal → is_complete should be False."""
-        data = IntakeData(
-            first_name="Alex",
-            brand_name="Nike",
-            competitors=["Adidas"],
-            primary_goal="",
-            target_customer="athletes",
-        )
-        assert data.is_complete is False
-
-    def test_is_complete_missing_target(self) -> None:
-        """Empty target_customer → is_complete should be False."""
-        data = IntakeData(
-            first_name="Alex",
-            brand_name="Nike",
-            competitors=["Adidas"],
-            primary_goal="acquisition",
-            target_customer="",
-        )
-        assert data.is_complete is False
-
-    def test_completion_score_full(self) -> None:
-        """All fields filled → completion_score should be 1.0."""
-        data = IntakeData(
-            first_name="Alex",
-            brand_name="Nike",
-            brand_url="https://nike.com",
-            competitors=["Adidas"],
-            primary_goal="acquisition",
-            target_customer="athletes",
-            creative_directions=CreativeDirections(
-                explore=["athlete stories"],
-                avoid=["studio shots"],
-            ),
-            additional_context="Focus on sustainability",
-        )
-        assert data.completion_score == 1.0
-
-    def test_completion_score_empty(self) -> None:
-        """Default (all empty) → completion_score should be 0.0."""
-        data = IntakeData()
-        assert data.completion_score == 0.0
-
-    def test_completion_score_partial(self) -> None:
-        """Half-filled → completion_score should be approximately 0.5."""
-        data = IntakeData(
-            first_name="",  # empty
-            brand_name="Nike",  # filled
-            brand_url="",  # empty
-            competitors=[],  # empty
-            primary_goal="goal",  # filled
-            target_customer="",  # empty
-            additional_context="",  # empty
-        )
-        # 9 total fields, 2 filled = 0.222...
-        score = data.completion_score
-        assert 0.0 < score < 1.0
-        assert score == pytest.approx(2 / 9)
+    """Test the IntakeData model — defaults and field behavior."""
 
     def test_default_construction(self) -> None:
         """Default construction yields empty strings and empty lists."""
@@ -200,13 +101,28 @@ class TestChatSession:
     def test_status_transition(self) -> None:
         """Status can be transitioned through pipeline phases."""
         session = ChatSession()
-        assert session.status == "intaking"
-        session.status = "researching"
-        assert session.status == "researching"
-        session.status = "synthesizing"
-        assert session.status == "synthesizing"
-        session.status = "complete"
-        assert session.status == "complete"
+        assert session.status == Status.INTAKING
+        session.status = Status.RESEARCHING
+        assert session.status == Status.RESEARCHING
+        session.status = Status.SYNTHESIZING
+        assert session.status == Status.SYNTHESIZING
+        session.status = Status.COMPLETE
+        assert session.status == Status.COMPLETE
+
+
+class TestStatus:
+    """Test the Status enum."""
+
+    def test_status_values(self) -> None:
+        """Status enum values match the expected strings."""
+        assert Status.INTAKING == "intaking"
+        assert Status.RESEARCHING == "researching"
+        assert Status.SYNTHESIZING == "synthesizing"
+        assert Status.COMPLETE == "complete"
+
+    def test_status_serialization(self) -> None:
+        """Status serializes as its string value."""
+        assert Status.RESEARCHING.value == "researching"
 
     def test_unique_sessions(self) -> None:
         """Each session gets a unique session_id."""
@@ -403,7 +319,6 @@ class TestCreativeDirections:
             ),
         )
         assert data.creative_directions.explore == ["community stories"]
-        assert data.is_complete is True
 
 
 # ============================================================================

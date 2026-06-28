@@ -303,7 +303,9 @@ class TestFullPipeline:
         session = await pipeline.run_intake(session, messages)
 
         # 3. Assert intake is complete
-        assert session.intake_data.is_complete, "Intake should be complete after all messages"
+        assert pipeline._completeness.check(session.intake_data).is_complete, (
+            "Intake should be complete after all messages"
+        )
         assert session.status == "researching", "Status should transition to researching"
         assert session.intake_data.brand_name == "Nike"
         assert "Adidas" in session.intake_data.competitors
@@ -409,7 +411,7 @@ class TestFullPipeline:
 
         assert persisted is not None
         assert persisted.intake_data.brand_name == "Nike"
-        assert persisted.intake_data.is_complete is True
+        assert pipeline._completeness.check(persisted.intake_data).is_complete is True
 
     @pytest.mark.asyncio
     async def test_should_handle_single_message_intake(
@@ -428,4 +430,4 @@ class TestFullPipeline:
 
         assert session.intake_data.brand_name == "Nike"
         assert "Adidas" in session.intake_data.competitors
-        assert session.intake_data.is_complete is True
+        assert pipeline._completeness.check(session.intake_data).is_complete is True

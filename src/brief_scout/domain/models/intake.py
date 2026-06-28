@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
+from enum import StrEnum
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class Status(StrEnum):
+    """Pipeline status for a chat session."""
+
+    INTAKING = "intaking"
+    RESEARCHING = "researching"
+    SYNTHESIZING = "synthesizing"
+    COMPLETE = "complete"
 
 
 class CreativeDirections(BaseModel):
@@ -21,8 +30,9 @@ class CreativeDirections(BaseModel):
 class IntakeData(BaseModel):
     """Structured data collected during conversational intake.
 
-    Required fields for research trigger: brand_name, competitors (>=1),
-    primary_goal, target_customer.
+    Required fields for research trigger are defined by the intake journey
+    schema (see ``IntakeJourney``). This model is intentionally a plain data
+    container; completeness evaluation lives in ``CompletenessChecker``.
     """
 
     model_config = ConfigDict(frozen=False)
@@ -36,46 +46,13 @@ class IntakeData(BaseModel):
     creative_directions: CreativeDirections = Field(default_factory=CreativeDirections)
     additional_context: str = ""
 
-    @property
-    def is_complete(self) -> bool:
-        """Check if the original four required fields are populated.
-
-        This is a convenience helper for tests and backward compatibility.
-        The authoritative completeness check is performed by the journey-driven
-        CompletenessChecker, which may include additional required fields such
-        as ``first_name``.
-        """
-        return bool(
-            self.brand_name.strip()
-            and len(self.competitors) >= 1
-            and self.primary_goal.strip()
-            and self.target_customer.strip()
-        )
-
-    @property
-    def completion_score(self) -> float:
-        """Return 0.0 to 1.0 indicating what fraction of all fields are filled."""
-        fields = [
-            self.first_name,
-            self.brand_name,
-            self.brand_url,
-            self.competitors,
-            self.primary_goal,
-            self.target_customer,
-            self.additional_context,
-        ]
-        dirs = self.creative_directions
-        fields.extend([dirs.explore, dirs.avoid])
-        filled = sum(1 for f in fields if f)
-        return filled / len(fields)
-
 
 class ChatMessage(BaseModel):
     """A single message in the chat conversation."""
 
     model_config = ConfigDict(frozen=False)
 
-    role: Literal["user", "assistant", "system"] = "user"
+    role: str = "user"
     content: str = ""
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -89,5 +66,5 @@ class ChatSession(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     intake_data: IntakeData = Field(default_factory=IntakeData)
     asked_optional_questions: list[str] = Field(default_factory=list)
-    status: Literal["intaking", "researching", "synthesizing", "complete"] = "intaking"
+    status: Status = Field(default=Status.INTAKING)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

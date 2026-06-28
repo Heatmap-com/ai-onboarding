@@ -2,21 +2,48 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LLMProviderConfig(BaseModel):
-    """Configuration for a single LLM provider."""
+    """Configuration for a single LLM provider.
+
+    ``adapter_id`` is a generic identifier string. The integration layer
+    maps identifiers to concrete adapter implementations via a registry.
+    The legacy ``adapter_class`` key is still accepted in YAML for backward
+    compatibility and is normalized into ``adapter_id``.
+    """
 
     model_config = ConfigDict(frozen=False, extra="allow")
 
-    adapter_class: str = ""
+    adapter_id: str = ""
     api_key: str = ""
     base_url: str = ""
     model: str = ""
     temperature: float = 0.3
     max_tokens: int = 2000
     timeout_seconds: float = 30.0
+
+    @model_validator(mode="after")
+    def _normalize_adapter_id(self) -> LLMProviderConfig:
+        """Fall back to legacy ``adapter_class`` when ``adapter_id`` is absent."""
+        if not self.adapter_id:
+            extra = self.model_extra or {}
+            legacy = extra.get("adapter_class") or extra.get("adapter_id")
+            if legacy:
+                self.adapter_id = str(legacy)
+        return self
+
+    @property
+    def adapter_class(self) -> str:
+        """Backward-compatible alias that prefers the explicit ``adapter_class`` extra."""
+        extra = self.model_extra or {}
+        return str(extra.get("adapter_class", self.adapter_id))
+
+    @property
+    def extras(self) -> dict[str, object]:
+        """Return provider-specific extra settings as a generic config bag."""
+        return {k: v for k, v in (self.model_extra or {}).items() if k != "adapter_class"}
 
 
 class PromptTemplateConfig(BaseModel):
@@ -29,17 +56,85 @@ class PromptTemplateConfig(BaseModel):
 
 
 class PromptsConfig(BaseModel):
-    """All prompt templates organized by use case."""
+    """All prompt templates organized by use case.
 
-    model_config = ConfigDict(frozen=False)
+    Research prompts are stored in an open ``research_steps`` catalog so
+    new research steps can be added in YAML without touching this model.
+    Legacy flat keys such as ``research_brand_audit`` are automatically
+    migrated into the catalog.
+    """
+
+    model_config = ConfigDict(frozen=False, extra="allow")
 
     extraction_system: str = ""
-    research_brand_audit: PromptTemplateConfig = Field(default_factory=PromptTemplateConfig)
-    research_competitor_scan: PromptTemplateConfig = Field(default_factory=PromptTemplateConfig)
-    research_trend_pulse: PromptTemplateConfig = Field(default_factory=PromptTemplateConfig)
-    research_customer_voice: PromptTemplateConfig = Field(default_factory=PromptTemplateConfig)
-    research_hook_mining: PromptTemplateConfig = Field(default_factory=PromptTemplateConfig)
     synthesis: PromptTemplateConfig = Field(default_factory=PromptTemplateConfig)
+    research_steps: dict[str, PromptTemplateConfig] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collect_research_prompts(cls, data: object) -> object:
+        """Move legacy flat research prompt keys into ``research_steps``."""
+        if not isinstance(data, dict):
+            return data
+        normalized: dict[str, object] = dict(data)
+        steps: dict[str, PromptTemplateConfig] = {}
+        legacy_steps = normalized.pop("research_steps", None)
+        if isinstance(legacy_steps, dict):
+            for key, value in legacy_steps.items():
+                if isinstance(value, dict):
+                    steps[key] = PromptTemplateConfig.model_validate(value)
+                elif isinstance(value, PromptTemplateConfig):
+                    steps[key] = value
+
+        for key in list(normalized):
+            if key.startswith("research_") and isinstance(normalized[key], dict):
+                step_name = key[len("research_") :]
+                steps[step_name] = PromptTemplateConfig.model_validate(normalized.pop(key))
+
+        normalized["research_steps"] = steps
+        return normalized
+
+    @field_validator("research_steps", mode="before")
+    @classmethod
+    def _ensure_prompt_template_objects(
+        cls,
+        value: object,
+    ) -> dict[str, PromptTemplateConfig]:
+        """Ensure every research step value is a ``PromptTemplateConfig``."""
+        if not isinstance(value, dict):
+            return {}
+        result: dict[str, PromptTemplateConfig] = {}
+        for key, item in value.items():
+            if isinstance(item, PromptTemplateConfig):
+                result[key] = item
+            elif isinstance(item, dict):
+                result[key] = PromptTemplateConfig.model_validate(item)
+        return result
+
+    @property
+    def research_brand_audit(self) -> PromptTemplateConfig:
+        """Backward-compatible accessor for the brand audit prompt."""
+        return self.research_steps.get("brand_audit", PromptTemplateConfig())
+
+    @property
+    def research_competitor_scan(self) -> PromptTemplateConfig:
+        """Backward-compatible accessor for the competitor scan prompt."""
+        return self.research_steps.get("competitor_scan", PromptTemplateConfig())
+
+    @property
+    def research_trend_pulse(self) -> PromptTemplateConfig:
+        """Backward-compatible accessor for the trend pulse prompt."""
+        return self.research_steps.get("trend_pulse", PromptTemplateConfig())
+
+    @property
+    def research_customer_voice(self) -> PromptTemplateConfig:
+        """Backward-compatible accessor for the customer voice prompt."""
+        return self.research_steps.get("customer_voice", PromptTemplateConfig())
+
+    @property
+    def research_hook_mining(self) -> PromptTemplateConfig:
+        """Backward-compatible accessor for the hook mining prompt."""
+        return self.research_steps.get("hook_mining", PromptTemplateConfig())
 
 
 class TelemetryConfig(BaseModel):
@@ -77,7 +172,7 @@ class AppConfig(BaseModel):
         """Get configuration for a specific LLM provider.
 
         Args:
-            provider_name: The name of the provider (e.g., 'fake', 'openai').
+            provider_name: The name of the provider (e.g. 'fake', 'openai').
 
         Returns:
             The LLMProviderConfig for the named provider.

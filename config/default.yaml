@@ -4,12 +4,14 @@ default_llm_provider: fake
 
 llm_providers:
   fake:
+    adapter_id: "fake"
     adapter_class: "brief_scout.infrastructure.llm.fake_llm_adapter.FakeLLMAdapter"
     fixture_dir: "tests/fixtures/llm_responses"
     default_fixture: "default"
     latency_ms: 50
     demo_journey_path: "tests/fixtures/demo_journey.yaml"
   openai:
+    adapter_id: "openai"
     adapter_class: "brief_scout.infrastructure.llm.openai_adapter.OpenAIAdapter"
     api_key: "${OPENAI_API_KEY}"
     model: "gpt-4o-mini"
@@ -17,6 +19,7 @@ llm_providers:
     max_tokens: 2000
     timeout_seconds: 60.0
   claude:
+    adapter_id: "claude"
     adapter_class: "brief_scout.infrastructure.llm.claude_adapter.ClaudeAdapter"
     api_key: "${CLAUDE_API_KEY}"
     model: "claude-3-haiku-20240307"
@@ -24,6 +27,7 @@ llm_providers:
     max_tokens: 2000
     timeout_seconds: 60.0
   kimi:
+    adapter_id: "kimi"
     adapter_class: "brief_scout.infrastructure.llm.kimi_adapter.KimiAdapter"
     api_key: "${KIMI_API_KEY}"
     model: "moonshot-v1-8k"
@@ -41,25 +45,26 @@ prompts:
 
     Do not include markdown code fences or any explanatory text.
 
-  research_brand_audit:
-    system: "You are a creative analyst. Search the web and return ONLY a JSON object. No prose."
-    user: "Research the brand: {brand_name} ({brand_url}). Return JSON with brand_positioning, current_creative_angle, key_messages, visual_identity_notes, recent_campaigns."
+  research_steps:
+    brand_audit:
+      system: "You are a creative analyst. Search the web and return ONLY a JSON object. No prose."
+      user: "Research the brand: {brand_name} ({brand_url}). Return JSON with brand_positioning, current_creative_angle, key_messages, visual_identity_notes, recent_campaigns."
 
-  research_competitor_scan:
-    system: "You are a competitive creative analyst. Return ONLY JSON."
-    user: "Research advertising strategy for competitors of {brand_name}: {competitors}. Return JSON with competitor details, category_creative_patterns, whitespace_opportunities."
+    competitor_scan:
+      system: "You are a competitive creative analyst. Return ONLY JSON."
+      user: "Research advertising strategy for competitors of {brand_name}: {competitors}. Return JSON with competitor details, category_creative_patterns, whitespace_opportunities."
 
-  research_trend_pulse:
-    system: "You are a market trend analyst. Return ONLY JSON."
-    user: "Research trends for {brand_name} in the {category} space. Goal: {primary_goal}. Return JSON with category_trends, cultural_moments, emerging_angles, timing_notes."
+    trend_pulse:
+      system: "You are a market trend analyst. Return ONLY JSON."
+      user: "Research trends for {brand_name} in the {category} space. Goal: {primary_goal}. Return JSON with category_trends, cultural_moments, emerging_angles, timing_notes."
 
-  research_customer_voice:
-    system: "You are a consumer insights analyst. Return ONLY JSON."
-    user: "Research what customers say about {brand_name} in {category}. Target: {target_customer}. Return JSON with customer_language, top_desires, top_frustrations, emotional_drivers, objections."
+    customer_voice:
+      system: "You are a consumer insights analyst. Return ONLY JSON."
+      user: "Research what customers say about {brand_name} in {category}. Target: {target_customer}. Return JSON with customer_language, top_desires, top_frustrations, emotional_drivers, objections."
 
-  research_hook_mining:
-    system: "You are a direct response copywriter. Return ONLY JSON."
-    user: "Identify creative hooks for {brand_name} targeting {target_customer} with goal {primary_goal}. Return JSON with proven_hook_types, emotional_angles, rational_angles, format_recommendations, headline_starters."
+    hook_mining:
+      system: "You are a direct response copywriter. Return ONLY JSON."
+      user: "Identify creative hooks for {brand_name} targeting {target_customer} with goal {primary_goal}. Return JSON with proven_hook_types, emotional_angles, rational_angles, format_recommendations, headline_starters."
 
   synthesis:
     system: "You are a senior creative strategist. Write a complete Creative Brief. Be specific and actionable."

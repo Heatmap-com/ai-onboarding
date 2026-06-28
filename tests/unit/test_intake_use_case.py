@@ -119,9 +119,18 @@ class IntakeUseCase:
         user_texts = [m.content for m in messages if m.role == "user"]
         " ".join(user_texts).lower()
 
-        # Extract brand name — look after "for" keyword
+        # Extract first name
         for text in user_texts:
             lower = text.lower()
+            if not data.first_name:
+                for prefix in ["name is ", "i'm ", "i am "]:
+                    if prefix in lower:
+                        rest = lower.split(prefix, 1)[1]
+                        candidate = rest.split(".")[0].split(",")[0].split(" ")[0].strip()
+                        if candidate:
+                            data.first_name = candidate.title()
+                            break
+
             if "building creative for" in lower or "brand" in lower:
                 # Simple heuristic: capitalized word after "for"
                 parts = text.split("for ")
@@ -284,12 +293,13 @@ class TestIntakeUseCase:
         # Simulate a complete intake conversation
         result = await use_case.process_message(
             session,
-            "We're building creative for Nike. Competitors are Adidas and Puma. "
+            "My name is Alex. We're building creative for Nike. Competitors are Adidas and Puma. "
             "We want new customer acquisition. "
             "Target is 18-34 year old athletes who care about style and performance.",
         )
 
         # All fields should be extracted from the single comprehensive message
+        assert result.extracted_data.first_name == "Alex"
         assert result.extracted_data.brand_name == "Nike"
         assert (
             "Adidas" in result.extracted_data.competitors
@@ -297,7 +307,7 @@ class TestIntakeUseCase:
         )
         # The message should trigger completeness since brand + competitors + goal + target
         # are all present in the text
-        assert result.is_complete or result.extracted_data.is_complete
+        assert result.is_complete
 
     @pytest.mark.asyncio
     async def test_should_persist_session(

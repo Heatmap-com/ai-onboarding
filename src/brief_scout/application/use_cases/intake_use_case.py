@@ -3,29 +3,30 @@
 Per SPEC 6.1 — Processes user messages, extracts structured data, checks
 completeness, and transitions to research when enough data is collected.
 
-The interview flow is now driven by the declarative ``IntakeJourney`` schema,
+The interview flow is driven by the declarative ``IntakeJourney`` schema,
 so adding or reordering fields should not require changes to this file.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from jinja2 import Template
 from pydantic import BaseModel, Field
 
-from brief_scout.domain.errors import BriefScoutError, LLMCallError
+from brief_scout.domain.errors import BriefScoutError
 from brief_scout.domain.models import ChatMessage, ChatSession, IntakeData
-from brief_scout.domain.ports import Prompt, TelemetryEvent
+from brief_scout.domain.models.intake import Status
 
 if TYPE_CHECKING:
+    from brief_scout.application.services.journey_renderer import JourneyRenderer
     from brief_scout.domain.models.journey import IntakeJourney
-    from brief_scout.domain.ports import (
-        BriefStoragePort,
-        ConfigurationPort,
-        LLMPort,
-        TelemetryPort,
+    from brief_scout.domain.ports.application_ports import (
+        LoggerPort,
+        SessionWriter,
+        StructuredCompletionPort,
+        TemplateRenderer,
     )
+    from brief_scout.domain.ports.config_port import ConfigurationPort
     from brief_scout.domain.services import CompletenessChecker, IntakeDataMerger
 
 
@@ -55,10 +56,10 @@ class IntakeUseCase:
     - Transition to research phase when data is complete.
 
     Dependencies (constructor-injected):
-        llm: LLM adapter for completions and structured extraction.
-        config: Configuration source for prompt templates.
+        llm: Narrow LLM port for structured extraction.
+        config: Configuration source for prompt templates and provider extras.
         telemetry: Telemetry adapter for logging and events.
-        storage: Storage adapter for session persistence.
+        storage: Narrow session writer port.
         journey: Declarative intake journey schema.
         completeness_checker: Service evaluating intake completeness.
         merger: Service merging extracted data into existing data.
@@ -66,13 +67,14 @@ class IntakeUseCase:
 
     def __init__(
         self,
-        llm: LLMPort,
+        llm: StructuredCompletionPort,
         config: ConfigurationPort,
-        telemetry: TelemetryPort,
-        storage: BriefStoragePort,
+        telemetry: LoggerPort,
+        storage: SessionWriter,
         journey: IntakeJourney,
         completeness_checker: CompletenessChecker,
         merger: IntakeDataMerger,
+        renderer: TemplateRenderer | None = None,
     ) -> None:
         """Initialize the intake use case with all dependencies."""
         self._llm = llm
@@ -82,6 +84,18 @@ class IntakeUseCase:
         self._journey = journey
         self._completeness_checker = completeness_checker
         self._merger = merger
+        self._renderer = renderer
+        self._journey_renderer: JourneyRenderer | None = None
+
+    def _get_journey_renderer(self) -> JourneyRenderer:
+        """Lazy-load the journey renderer."""
+        if self._journey_renderer is None:
+            from brief_scout.application.services.journey_renderer import (
+                JourneyRenderer,
+            )
+
+            self._journey_renderer = JourneyRenderer(renderer=self._renderer)
+        return self._journey_renderer
 
     async def process_message(
         self,
@@ -135,22 +149,30 @@ class IntakeUseCase:
 
         # Step 4: Check completeness for telemetry
         completeness_result = self._completeness_checker.check(merged)
-        session.status = "intaking"
+        session.status = Status.INTAKING
 
         # Step 5: Determine next action
+        journey_renderer = self._get_journey_renderer()
         next_field = self._journey.next_field(
             merged,
             session.asked_optional_questions,
         )
 
         if next_field is not None:
-            assistant_message = self._journey.render_question(next_field, merged)
+            assistant_message = journey_renderer.render_question(
+                self._journey,
+                next_field,
+                merged,
+            )
             if not next_field.required and next_field.name not in session.asked_optional_questions:
                 session.asked_optional_questions.append(next_field.name)
             is_complete = False
         else:
-            assistant_message = self._journey.render_researching_message(merged)
-            session.status = "researching"
+            assistant_message = journey_renderer.render_researching_message(
+                self._journey,
+                merged,
+            )
+            session.status = Status.RESEARCHING
             is_complete = True
 
         session.messages.append(
@@ -160,17 +182,13 @@ class IntakeUseCase:
         # Step 6: Save session
         await self._storage.save_session(session)
 
-        self._telemetry.record_event(
-            TelemetryEvent(
-                event_type="intake.message.processed",
-                correlation_id=self._telemetry.get_correlation_id(),
-                data={
-                    "session_id": session.session_id,
-                    "is_complete": is_complete,
-                    "completion_confidence": completeness_result.confidence,
-                    "missing_fields": completeness_result.missing_fields,
-                },
-            ),
+        self._telemetry.log(
+            "Intake message processed",
+            level="INFO",
+            session_id=session.session_id,
+            is_complete=is_complete,
+            missing_fields=completeness_result.missing_fields,
+            confidence=completeness_result.confidence,
         )
 
         return IntakeResponse(
@@ -198,35 +216,30 @@ class IntakeUseCase:
         Raises:
             LLMCallError: If the LLM call or parsing fails.
         """
+        from brief_scout.domain.errors import LLMCallError
+
         self._telemetry.log(
             "Extracting structured data from conversation",
             level="DEBUG",
         )
 
-        # Build conversation transcript
-        transcript_lines: list[str] = []
-        for msg in messages:
-            prefix = "User" if msg.role == "user" else "Assistant"
-            transcript_lines.append(f"{prefix}: {msg.content}")
-        transcript = "\n".join(transcript_lines)
+        from brief_scout.application.services.intake_prompt_builder import (
+            IntakePromptBuilder,
+        )
 
-        # Build extraction prompt, injecting the auto-generated schema
         prompts_config = self._config.app_config.prompts
-        system_template = Template(prompts_config.extraction_system)
-        system_prompt = system_template.render(
-            schema=self._journey.render_extraction_schema(),
-        )
-        prompt = Prompt(
-            system=system_prompt,
-            user=f"Extract structured data from this conversation:\n\n{transcript}",
+        prompt = IntakePromptBuilder(renderer=self._renderer).build_extraction_prompt(
+            prompts_config.extraction_system,
+            self._journey,
+            messages,
         )
 
-        span_id = self._telemetry.start_span(
-            "intake.extract_structured_data",
-        )
+        # Generic provider extras are passed through as the structured completion
+        # config. This removes FakeLLM-specific ``demo_turn`` logic from the use
+        # case while still allowing adapters to consume adapter-specific settings.
+        extraction_config = self._generic_extraction_config()
 
         try:
-            extraction_config = self._select_extraction_config(messages)
             result = await self._llm.complete_structured(
                 prompt,
                 IntakeData,
@@ -248,24 +261,19 @@ class IntakeUseCase:
                 message=f"Failed to extract structured intake data: {exc}",
                 provider=self._llm.provider_name,
             ) from exc
-        finally:
-            self._telemetry.end_span(span_id)
 
-    def _select_extraction_config(
-        self,
-        messages: list[ChatMessage],
-    ) -> dict[str, object] | None:
-        """Select extraction config for the FakeLLM adapter.
+    def _generic_extraction_config(self) -> dict[str, Any] | None:
+        """Return generic provider extras to pass to the LLM port.
 
-        The FakeLLM adapter uses ``demo_turn`` to return cumulative demo data
-        from ``demo_journey.yaml``. Real LLM adapters ignore the config and
-        perform live extraction.
-
-        Args:
-            messages: Conversation history.
-
-        Returns:
-            Config dict with ``demo_turn``, or ``None`` for free matching.
+        The application layer no longer builds FakeLLM-specific ``demo_turn``
+        config; it delegates to whatever extra configuration the active
+        provider exposes.
         """
-        user_turns = sum(1 for msg in messages if msg.role == "user")
-        return {"demo_turn": user_turns}
+        try:
+            provider_config = self._config.app_config.get_provider_config(
+                self._llm.provider_name,
+            )
+            extras = provider_config.extras
+            return extras if extras else None
+        except KeyError:
+            return None
