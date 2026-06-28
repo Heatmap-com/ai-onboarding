@@ -6,19 +6,16 @@ and research bundle) and produces a complete, structured Brief model.
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from brief_scout.domain.errors import BriefScoutError, SynthesisError
-from brief_scout.domain.models import (
-    Brief,
-    IntakeData,
-    ResearchBundle,
-)
-from brief_scout.domain.ports import Prompt
+from brief_scout.domain.models import Brief, IntakeData, ResearchBundle
+from brief_scout.domain.ports.telemetry_port import LogLevel, TelemetryEvent
 
 if TYPE_CHECKING:
-    from brief_scout.domain.ports import ConfigurationPort, LLMPort, TelemetryPort
+    from brief_scout.domain.ports.application_ports import StructuredCompletionPort
+    from brief_scout.domain.ports.config_port import ConfigurationPort
+    from brief_scout.domain.ports.telemetry_port import TelemetryPort
 
 
 class SynthesisUseCase:
@@ -29,14 +26,14 @@ class SynthesisUseCase:
     model with creative angles, headlines, hooks, and strategic direction.
 
     Dependencies (constructor-injected):
-        llm: LLM adapter for structured completions.
+        llm: Narrow LLM port for structured completions.
         config: Configuration source for the synthesis prompt template.
         telemetry: Telemetry adapter for logging and span tracking.
     """
 
     def __init__(
         self,
-        llm: LLMPort,
+        llm: StructuredCompletionPort,
         config: ConfigurationPort,
         telemetry: TelemetryPort,
     ) -> None:
@@ -59,7 +56,7 @@ class SynthesisUseCase:
 
         Args:
             intake_data: Structured intake data from the user conversation.
-            research_bundle: Aggregated results from all 5 research calls.
+            research_bundle: Aggregated results from research pipeline.
 
         Returns:
             A fully populated Brief model.
@@ -75,13 +72,17 @@ class SynthesisUseCase:
         span_id = self._telemetry.start_span("synthesis.execute")
 
         try:
-            # Build synthesis prompt
-            prompt = self._build_synthesis_prompt(intake_data, research_bundle)
+            from brief_scout.application.services.synthesis_prompt_builder import (
+                SynthesisPromptBuilder,
+            )
 
-            # Call LLM with Brief as structured output
+            prompt = SynthesisPromptBuilder().build(
+                self._config.app_config.prompts.synthesis,
+                intake_data,
+                research_bundle,
+            )
+
             brief: Brief = await self._llm.complete_structured(prompt, Brief)
-
-            # Attach research sources to the brief
             brief.sources = research_bundle
 
             self._telemetry.log(
@@ -90,8 +91,6 @@ class SynthesisUseCase:
                 brand_name=brief.brand_name,
                 creative_angles_count=len(brief.creative_angles),
             )
-            from brief_scout.domain.ports import LogLevel, TelemetryEvent
-
             self._telemetry.record_event(
                 TelemetryEvent(
                     event_type="synthesis.complete",
@@ -120,41 +119,3 @@ class SynthesisUseCase:
             ) from exc
         finally:
             self._telemetry.end_span(span_id)
-
-    def _build_synthesis_prompt(
-        self,
-        intake_data: IntakeData,
-        research_bundle: ResearchBundle,
-    ) -> Prompt:
-        """Build the synthesis prompt from templates and data.
-
-        Serializes the intake data and research bundle as JSON and injects
-        them into the configured synthesis prompt template.
-
-        Args:
-            intake_data: Structured intake data.
-            research_bundle: Aggregated research results.
-
-        Returns:
-            Formatted Prompt ready for the LLM.
-        """
-        prompts_config = self._config.app_config.prompts.synthesis
-
-        intake_json = json.dumps(
-            intake_data.model_dump(),
-            indent=2,
-            default=str,
-        )
-        research_json = json.dumps(
-            research_bundle.model_dump(),
-            indent=2,
-            default=str,
-        )
-
-        user_content = prompts_config.user.replace("{intake_json}", intake_json)
-        user_content = user_content.replace("{research_json}", research_json)
-
-        return Prompt(
-            system=prompts_config.system,
-            user=user_content,
-        )

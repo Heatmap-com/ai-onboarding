@@ -59,3 +59,62 @@ uv run python scripts/run_demo.py
 ```
 
 This writes a transcript to `demo_conversation.md`.
+
+## How to add a research step
+
+Research steps are now pluggable. To add a new research dimension:
+
+1. Create a class implementing `ResearchStep` in
+   `src/brief_scout/application/services/research_steps/`:
+
+   ```python
+   from pydantic import BaseModel
+   from brief_scout.application.services.research_pipeline import ResearchStep
+
+   class MarketSizingResult(BaseModel):
+       tam: str = ""
+
+   class MarketSizingStep(ResearchStep):
+       name = "market_sizing"
+
+       async def execute(self, intake_data: IntakeData) -> BaseModel:
+           ...
+           return MarketSizingResult(tam="...")
+   ```
+
+2. Add a prompt template under `prompts.research_steps` in `config/default.yaml`:
+
+   ```yaml
+   prompts:
+     research_steps:
+       market_sizing:
+         system: "..."
+         user: "..."
+   ```
+
+3. The `ResearchUseCase` builds the pipeline from the configured steps automatically;
+   no use-case code changes are required.
+
+## How to add a field type
+
+Field-type merge behavior is extensible via `FieldTypeRegistry`.
+To support a new type such as `number`:
+
+```python
+from brief_scout.domain.services.field_type_registry import FieldTypeRegistry
+
+def merge_number(existing: float, extracted: float) -> float:
+    return extracted if extracted != 0 else existing
+
+registry = create_default_registry()
+registry.register("number", merge_number)
+merger = IntakeDataMerger(journey=journey, registry=registry)
+```
+
+## Narrow ports
+
+Application services declare narrow dependencies in
+`src/brief_scout/domain/ports/application_ports.py` (e.g., `LoggerPort`,
+`SessionWriter`, `StructuredCompletionPort`, `TemplateRenderer`). Prefer
+injecting these small interfaces over the full `TelemetryPort`,
+`BriefStoragePort`, or `LLMPort` when only a subset is needed.

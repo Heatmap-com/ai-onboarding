@@ -308,6 +308,8 @@ class CompletenessChecker:
         """Evaluate intake data completeness."""
         missing: list[str] = []
 
+        if not intake_data.first_name.strip():
+            missing.append("first_name")
         if not intake_data.brand_name.strip():
             missing.append("brand_name")
         if len(intake_data.competitors) < 1:
@@ -318,9 +320,8 @@ class CompletenessChecker:
             missing.append("target_customer")
 
         is_complete = len(missing) == 0
-        confidence = (
-            intake_data.completion_score if hasattr(intake_data, "completion_score") else 0.0
-        )
+        total = len(self.REQUIRED_FIELDS)
+        confidence = (total - len(missing)) / total
 
         return CompletenessResult(
             is_complete=is_complete,

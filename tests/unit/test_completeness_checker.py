@@ -53,7 +53,7 @@ class TestCompletenessChecker:
         assert result.is_complete is True
         assert result.ready_to_research is True
         assert result.missing_fields == []
-        assert result.confidence == data.completion_score
+        assert result.confidence == 1.0
 
     def test_should_report_missing_first_name(self, checker: CompletenessChecker) -> None:
         """Missing first_name should be reported."""

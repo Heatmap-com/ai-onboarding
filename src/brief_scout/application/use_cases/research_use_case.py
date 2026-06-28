@@ -1,77 +1,100 @@
-"""Research use case — orchestrates 5 parallel LLM research calls.
+"""Research use case — thin coordinator over the research pipeline.
 
-Per SPEC 6.2 — THE CORE PIPELINE. Executes 5 independent research calls
-concurrently using asyncio.gather. Each call is isolated; failures in one
-do not affect the others. The pipeline NEVER fails completely.
+Per SPEC 6.2 — THE CORE PIPELINE. The actual orchestration now lives in
+``ResearchPipeline``; this use case builds the default step sequence from
+configuration and delegates execution.
 """
 
 from __future__ import annotations
 
-import asyncio
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
-from pydantic import BaseModel
-
-from brief_scout.domain.models import (
-    BrandAuditResult,
-    CompetitorScanResult,
-    CustomerVoiceResult,
-    HookMiningResult,
-    IntakeData,
-    ResearchBundle,
-    TrendPulseResult,
-)
-from brief_scout.domain.ports import LogLevel, Prompt, TelemetryEvent
+from brief_scout.domain.services.category_classifier import CategoryClassifier
 
 if TYPE_CHECKING:
-    from brief_scout.domain.models.config import PromptTemplateConfig
-    from brief_scout.domain.ports import ConfigurationPort, LLMPort, TelemetryPort
-
-T = TypeVar("T", bound=BaseModel)
+    from brief_scout.application.services.research_pipeline import ResearchPipeline
+    from brief_scout.application.services.research_steps import ResearchStep
+    from brief_scout.domain.models import IntakeData, ResearchBundle
+    from brief_scout.domain.models.research import (
+        BrandAuditResult,
+        CompetitorScanResult,
+        CustomerVoiceResult,
+        HookMiningResult,
+        TrendPulseResult,
+    )
+    from brief_scout.domain.ports.application_ports import StructuredCompletionPort
+    from brief_scout.domain.ports.config_port import ConfigurationPort
+    from brief_scout.domain.ports.telemetry_port import TelemetryPort
 
 
 class ResearchUseCase:
-    """Orchestrates the 5 parallel research calls.
-
-    Uses ``asyncio.gather`` with ``return_exceptions=True`` for true
-    parallelism. Each call is independent — a failure in any single call
-    is logged and returns a default (empty) instance, allowing the pipeline
-    to continue with partial results.
+    """Thin coordinator that runs the configured research pipeline.
 
     Dependencies (constructor-injected):
-        llm: LLM adapter for structured completions.
+        llm: Narrow LLM port for structured completions.
         config: Configuration source for prompt templates.
         telemetry: Telemetry adapter for logging and span tracking.
+        classifier: Optional category classifier for steps that need it.
     """
 
     def __init__(
         self,
-        llm: LLMPort,
+        llm: StructuredCompletionPort,
         config: ConfigurationPort,
         telemetry: TelemetryPort,
+        classifier: CategoryClassifier | None = None,
     ) -> None:
         self._llm = llm
         self._config = config
         self._telemetry = telemetry
+        self._classifier = classifier or CategoryClassifier()
+
+    def _build_pipeline(self) -> ResearchPipeline:
+        """Build the default research pipeline from configured steps."""
+        from brief_scout.application.services.research_pipeline import ResearchPipeline
+        from brief_scout.application.services.research_steps.brand_audit_step import (
+            BrandAuditStep,
+        )
+        from brief_scout.application.services.research_steps.competitor_scan_step import (
+            CompetitorScanStep,
+        )
+        from brief_scout.application.services.research_steps.customer_voice_step import (
+            CustomerVoiceStep,
+        )
+        from brief_scout.application.services.research_steps.hook_mining_step import (
+            HookMiningStep,
+        )
+        from brief_scout.application.services.research_steps.trend_pulse_step import (
+            TrendPulseStep,
+        )
+
+        prompts = self._config.app_config.prompts.research_steps
+
+        steps: list[ResearchStep] = [
+            BrandAuditStep(template=prompts["brand_audit"], llm=self._llm),
+            CompetitorScanStep(template=prompts["competitor_scan"], llm=self._llm),
+            TrendPulseStep(
+                template=prompts["trend_pulse"],
+                llm=self._llm,
+                classifier=self._classifier,
+            ),
+            CustomerVoiceStep(
+                template=prompts["customer_voice"],
+                llm=self._llm,
+                classifier=self._classifier,
+            ),
+            HookMiningStep(template=prompts["hook_mining"], llm=self._llm),
+        ]
+        return ResearchPipeline(steps=steps, telemetry=self._telemetry)
 
     async def execute(self, intake_data: IntakeData) -> ResearchBundle:
-        """Execute 5 parallel research calls.
-
-        Research calls:
-            1. Brand Audit → BrandAuditResult
-            2. Competitor Scan → CompetitorScanResult
-            3. Trend Pulse → TrendPulseResult
-            4. Customer Voice → CustomerVoiceResult
-            5. Hook Mining → HookMiningResult
-
-        All 5 run concurrently via ``asyncio.gather``. If any call fails,
-        its result is the default (empty) model instance.
+        """Execute the configured research pipeline.
 
         Args:
             intake_data: Structured intake data collected from the user.
 
         Returns:
-            ResearchBundle aggregating results from all 5 calls.
+            ResearchBundle aggregating results from all configured steps.
         """
         self._telemetry.log(
             "Starting research pipeline",
@@ -80,352 +103,79 @@ class ResearchUseCase:
         )
         span_id = self._telemetry.start_span("research.execute")
 
-        # Launch all 5 research calls concurrently
-        results = await asyncio.gather(
-            self._call_brand_audit(intake_data),
-            self._call_competitor_scan(intake_data),
-            self._call_trend_pulse(intake_data),
-            self._call_customer_voice(intake_data),
-            self._call_hook_mining(intake_data),
-            return_exceptions=True,
-        )
-
-        # Unpack results — exceptions are caught by _execute_single_research,
-        # but we handle any residual exceptions defensively
-        brand_audit = results[0] if isinstance(results[0], BrandAuditResult) else BrandAuditResult()
-        competitor_scan = (
-            results[1] if isinstance(results[1], CompetitorScanResult) else CompetitorScanResult()
-        )
-        trend_pulse = results[2] if isinstance(results[2], TrendPulseResult) else TrendPulseResult()
-        customer_voice = (
-            results[3] if isinstance(results[3], CustomerVoiceResult) else CustomerVoiceResult()
-        )
-        hook_mining = results[4] if isinstance(results[4], HookMiningResult) else HookMiningResult()
-
-        bundle = ResearchBundle(
-            brand_audit=brand_audit,
-            competitor_scan=competitor_scan,
-            trend_pulse=trend_pulse,
-            customer_voice=customer_voice,
-            hook_mining=hook_mining,
-        )
-
-        self._telemetry.log(
-            "Research pipeline complete",
-            level="INFO",
-            brand_name=intake_data.brand_name,
-        )
-        self._telemetry.end_span(span_id)
-
-        return bundle
-
-    async def _call_brand_audit(
-        self,
-        intake_data: IntakeData,
-    ) -> BrandAuditResult:
-        """Call 1 — Brand Audit.
-
-        Researches the brand's positioning, creative angle, key messages,
-        visual identity, and recent campaigns.
-
-        Args:
-            intake_data: Structured intake data.
-
-        Returns:
-            BrandAuditResult with research findings.
-        """
-        prompts = self._config.app_config.prompts.research_brand_audit
-        prompt = self._format_prompt(
-            prompts,
-            brand_name=intake_data.brand_name,
-            brand_url=intake_data.brand_url,
-        )
-        return await self._execute_single_research(
-            "Brand Audit",
-            prompt,
-            BrandAuditResult,
-        )
-
-    async def _call_competitor_scan(
-        self,
-        intake_data: IntakeData,
-    ) -> CompetitorScanResult:
-        """Call 2 — Competitor Ad Scan.
-
-        Researches competitors' advertising strategies, creative patterns,
-        and whitespace opportunities.
-
-        Args:
-            intake_data: Structured intake data.
-
-        Returns:
-            CompetitorScanResult with competitive landscape findings.
-        """
-        prompts = self._config.app_config.prompts.research_competitor_scan
-        competitors_str = (
-            ", ".join(intake_data.competitors) if intake_data.competitors else "unknown"
-        )
-        prompt = self._format_prompt(
-            prompts,
-            brand_name=intake_data.brand_name,
-            competitors=competitors_str,
-        )
-        return await self._execute_single_research(
-            "Competitor Scan",
-            prompt,
-            CompetitorScanResult,
-        )
-
-    async def _call_trend_pulse(
-        self,
-        intake_data: IntakeData,
-    ) -> TrendPulseResult:
-        """Call 3 — Category & Trend Pulse.
-
-        Researches category trends, cultural moments, emerging angles,
-        and timing notes.
-
-        Args:
-            intake_data: Structured intake data.
-
-        Returns:
-            TrendPulseResult with trend findings.
-        """
-        prompts = self._config.app_config.prompts.research_trend_pulse
-        category = self._infer_category(intake_data)
-        prompt = self._format_prompt(
-            prompts,
-            brand_name=intake_data.brand_name,
-            category=category,
-            primary_goal=intake_data.primary_goal,
-        )
-        return await self._execute_single_research(
-            "Trend Pulse",
-            prompt,
-            TrendPulseResult,
-        )
-
-    async def _call_customer_voice(
-        self,
-        intake_data: IntakeData,
-    ) -> CustomerVoiceResult:
-        """Call 4 — Customer Voice.
-
-        Researches customer language, desires, frustrations, emotional
-        drivers, and objections.
-
-        Args:
-            intake_data: Structured intake data.
-
-        Returns:
-            CustomerVoiceResult with customer insight findings.
-        """
-        prompts = self._config.app_config.prompts.research_customer_voice
-        category = self._infer_category(intake_data)
-        prompt = self._format_prompt(
-            prompts,
-            brand_name=intake_data.brand_name,
-            category=category,
-            target_customer=intake_data.target_customer,
-        )
-        return await self._execute_single_research(
-            "Customer Voice",
-            prompt,
-            CustomerVoiceResult,
-        )
-
-    async def _call_hook_mining(
-        self,
-        intake_data: IntakeData,
-    ) -> HookMiningResult:
-        """Call 5 — Hook & Angle Mining.
-
-        Identifies proven hook types, emotional/rational angles, format
-        recommendations, and headline starters.
-
-        Args:
-            intake_data: Structured intake data.
-
-        Returns:
-            HookMiningResult with hook and angle findings.
-        """
-        prompts = self._config.app_config.prompts.research_hook_mining
-        prompt = self._format_prompt(
-            prompts,
-            brand_name=intake_data.brand_name,
-            target_customer=intake_data.target_customer,
-            primary_goal=intake_data.primary_goal,
-        )
-        return await self._execute_single_research(
-            "Hook Mining",
-            prompt,
-            HookMiningResult,
-        )
-
-    async def _execute_single_research(
-        self,
-        call_name: str,
-        prompt: Prompt,
-        output_schema: type[T],
-    ) -> T:
-        """Execute a single research call with error handling and telemetry.
-
-        Logs a start event, attempts the LLM structured completion, and
-        returns either the parsed result or a default (empty) instance
-        on failure.
-
-        Args:
-            call_name: Human-readable name for the research call.
-            prompt: The formatted Prompt to send to the LLM.
-            output_schema: Pydantic model class for the expected output.
-
-        Returns:
-            Parsed instance of ``output_schema``, or a default empty instance
-            if the call fails.
-        """
-        self._telemetry.log(
-            f"Research call starting: {call_name}",
-            level="DEBUG",
-            call_name=call_name,
-        )
-        span_id = self._telemetry.start_span(f"research.{call_name}")
-
         try:
-            result: T = await self._llm.complete_structured(prompt, output_schema)
+            pipeline = self._build_pipeline()
+            bundle = await pipeline.execute(intake_data)
             self._telemetry.log(
-                f"Research call complete: {call_name}",
-                level="DEBUG",
-                call_name=call_name,
+                "Research pipeline complete",
+                level="INFO",
+                brand_name=intake_data.brand_name,
             )
-            self._telemetry.record_event(
-                TelemetryEvent(
-                    event_type="research.call.complete",
-                    correlation_id=self._telemetry.get_correlation_id(),
-                    data={"call_name": call_name, "status": "success"},
-                    level=LogLevel.INFO,
-                ),
-            )
-            return result
-        except Exception as exc:
-            self._telemetry.log(
-                f"Research call failed: {call_name} — {exc}",
-                level="ERROR",
-                call_name=call_name,
-                error=str(exc),
-            )
-            self._telemetry.record_event(
-                TelemetryEvent(
-                    event_type="research.call.failed",
-                    correlation_id=self._telemetry.get_correlation_id(),
-                    data={"call_name": call_name, "error": str(exc)},
-                    level=LogLevel.ERROR,
-                ),
-            )
-            return output_schema()
+            return bundle
         finally:
             self._telemetry.end_span(span_id)
 
-    @staticmethod
-    def _format_prompt(
-        template: PromptTemplateConfig,
-        **kwargs: str,
-    ) -> Prompt:
-        """Format a prompt template with keyword substitution.
+    # -----------------------------------------------------------------------
+    # Backward-compatible single-call helpers
+    # -----------------------------------------------------------------------
+    # ``routes.py`` (owned by Agent 2) still calls these private methods until
+    # the integration branch wires the new pipeline. They are intentionally
+    # thin wrappers around the same pluggable step classes.
 
-        Args:
-            template: PromptTemplateConfig with system and user templates.
-            **kwargs: Keyword substitutions for the user template.
-
-        Returns:
-            Formatted Prompt ready for the LLM.
-        """
-        user_content = template.user
-        for key, value in kwargs.items():
-            placeholder = "{" + key + "}"
-            user_content = user_content.replace(placeholder, value)
-        return Prompt(
-            system=template.system,
-            user=user_content,
+    async def _call_brand_audit(self, intake_data: IntakeData) -> BrandAuditResult:
+        """Call 1 — Brand Audit (deprecated, use ResearchPipeline)."""
+        from brief_scout.application.services.research_steps.brand_audit_step import (
+            BrandAuditStep,
         )
 
-    @staticmethod
-    def _infer_category(intake_data: IntakeData) -> str:
-        """Infer product category from intake data.
+        prompts = self._config.app_config.prompts.research_steps
+        step = BrandAuditStep(template=prompts["brand_audit"], llm=self._llm)
+        return await step.execute(intake_data)
 
-        Attempts to derive a category from the brand name, competitors,
-        or target customer description.
+    async def _call_competitor_scan(self, intake_data: IntakeData) -> CompetitorScanResult:
+        """Call 2 — Competitor Scan (deprecated, use ResearchPipeline)."""
+        from brief_scout.application.services.research_steps.competitor_scan_step import (
+            CompetitorScanStep,
+        )
 
-        Args:
-            intake_data: Structured intake data.
+        prompts = self._config.app_config.prompts.research_steps
+        step = CompetitorScanStep(template=prompts["competitor_scan"], llm=self._llm)
+        return await step.execute(intake_data)
 
-        Returns:
-            Inferred category string.
-        """
-        brand = intake_data.brand_name.lower()
-        competitors = " ".join(c.lower() for c in intake_data.competitors)
-        target = intake_data.target_customer.lower()
+    async def _call_trend_pulse(self, intake_data: IntakeData) -> TrendPulseResult:
+        """Call 3 — Trend Pulse (deprecated, use ResearchPipeline)."""
+        from brief_scout.application.services.research_steps.trend_pulse_step import (
+            TrendPulseStep,
+        )
 
-        # Simple keyword-based inference
-        keywords: dict[str, list[str]] = {
-            "apparel / footwear": [
-                "shoe",
-                "shoes",
-                "sneaker",
-                "apparel",
-                "clothing",
-                "fashion",
-                "wear",
-                "footwear",
-                "athletic",
-                "sportswear",
-            ],
-            "technology / software": [
-                "software",
-                "app",
-                "platform",
-                "tech",
-                "technology",
-                "saas",
-                "cloud",
-                "ai",
-                "digital",
-            ],
-            "food & beverage": [
-                "food",
-                "beverage",
-                "drink",
-                "restaurant",
-                "coffee",
-                "snack",
-                "organic",
-                "nutrition",
-            ],
-            "health & wellness": [
-                "health",
-                "wellness",
-                "fitness",
-                "gym",
-                "supplement",
-                "vitamin",
-                "mental health",
-                "wellbeing",
-            ],
-            "finance": [
-                "finance",
-                "banking",
-                "investment",
-                "crypto",
-                "payment",
-                "insurance",
-                "fintech",
-                "money",
-            ],
-        }
+        prompts = self._config.app_config.prompts.research_steps
+        step = TrendPulseStep(
+            template=prompts["trend_pulse"],
+            llm=self._llm,
+            classifier=self._classifier,
+        )
+        return await step.execute(intake_data)
 
-        combined_text = f"{brand} {competitors} {target}"
-        for category, words in keywords.items():
-            for word in words:
-                if word in combined_text:
-                    return category
+    async def _call_customer_voice(self, intake_data: IntakeData) -> CustomerVoiceResult:
+        """Call 4 — Customer Voice (deprecated, use ResearchPipeline)."""
+        from brief_scout.application.services.research_steps.customer_voice_step import (
+            CustomerVoiceStep,
+        )
 
-        return "general"
+        prompts = self._config.app_config.prompts.research_steps
+        step = CustomerVoiceStep(
+            template=prompts["customer_voice"],
+            llm=self._llm,
+            classifier=self._classifier,
+        )
+        return await step.execute(intake_data)
+
+    async def _call_hook_mining(self, intake_data: IntakeData) -> HookMiningResult:
+        """Call 5 — Hook Mining (deprecated, use ResearchPipeline)."""
+        from brief_scout.application.services.research_steps.hook_mining_step import (
+            HookMiningStep,
+        )
+
+        prompts = self._config.app_config.prompts.research_steps
+        step = HookMiningStep(template=prompts["hook_mining"], llm=self._llm)
+        return await step.execute(intake_data)

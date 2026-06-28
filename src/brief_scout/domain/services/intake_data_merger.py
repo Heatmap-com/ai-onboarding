@@ -1,16 +1,22 @@
 """Generic intake data merger.
 
 Merges newly extracted IntakeData into existing data using the declarative
-journey schema. This replaces hand-written per-field merge logic.
+journey schema. Field-type behavior is extensible through a
+``FieldTypeRegistry``.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from brief_scout.domain.services.field_type_registry import (
+    FieldTypeRegistry,
+    create_default_registry,
+)
+
 if TYPE_CHECKING:
     from brief_scout.domain.models.intake import IntakeData
-    from brief_scout.domain.models.journey import FieldType, IntakeJourney, JourneyField
+    from brief_scout.domain.models.journey import IntakeJourney, JourneyField
 
 
 class IntakeDataMerger:
@@ -18,15 +24,23 @@ class IntakeDataMerger:
 
     Attributes:
         journey: The intake journey describing field types and rules.
+        registry: Optional custom field-type registry. When omitted, the
+            default registry (string, list, object) is used.
     """
 
-    def __init__(self, journey: IntakeJourney) -> None:
-        """Initialize the merger with a journey schema.
+    def __init__(
+        self,
+        journey: IntakeJourney,
+        registry: FieldTypeRegistry | None = None,
+    ) -> None:
+        """Initialize the merger with a journey schema and optional registry.
 
         Args:
             journey: The intake journey to use for type-aware merging.
+            registry: Optional custom field-type registry.
         """
         self._journey = journey
+        self._registry = registry or create_default_registry()
 
     def merge(self, existing: IntakeData, extracted: IntakeData) -> IntakeData:
         """Return a new IntakeData with extracted values merged into existing.
@@ -35,6 +49,8 @@ class IntakeDataMerger:
         - String fields: keep existing value if present, otherwise use extracted.
         - List fields: append unique extracted items to existing items.
         - Object fields: recursively merge declared list/string properties.
+
+        New rules can be added by registering handlers on the registry.
 
         Args:
             existing: Previously stored intake data.
@@ -59,38 +75,12 @@ class IntakeDataMerger:
         existing_value: Any,
         extracted_value: Any,
     ) -> Any:
-        """Merge a single field based on its type."""
-        if field.type == "string":
-            return self._merge_string(existing_value, extracted_value)
-
-        if field.type == "list":
-            return self._merge_list(existing_value, extracted_value)
-
+        """Merge a single field based on its registered type handler."""
         if field.type == "object":
             return self._merge_object(field, existing_value, extracted_value)
 
-        # FieldType is an exhaustive literal, but keep a defensive fallback.
-        raise ValueError(f"Unknown field type: {field.type}")
-
-    @staticmethod
-    def _merge_string(existing: str, extracted: str) -> str:
-        """Keep existing string if populated, otherwise use extracted."""
-        if str(existing).strip():
-            return existing
-        if str(extracted).strip():
-            return extracted
-        return ""
-
-    @staticmethod
-    def _merge_list(existing: list[str], extracted: list[str]) -> list[str]:
-        """Merge two lists, preserving order and uniqueness."""
-        merged = list(existing)
-        seen = set(merged)
-        for item in extracted:
-            if item and item not in seen:
-                merged.append(item)
-                seen.add(item)
-        return merged
+        handler = self._registry.get(field.type)
+        return handler(existing_value, extracted_value)
 
     def _merge_object(
         self,
@@ -112,9 +102,8 @@ class IntakeDataMerger:
             setattr(result, prop.name, merged_prop)
         return result
 
-    @staticmethod
-    def _merge_property(prop_type: FieldType, existing: Any, extracted: Any) -> Any:
+    def _merge_property(self, prop_type: str, existing: Any, extracted: Any) -> Any:
         """Merge a single object property."""
         if prop_type == "list":
-            return IntakeDataMerger._merge_list(existing or [], extracted or [])
-        return IntakeDataMerger._merge_string(existing or "", extracted or "")
+            return self._registry.merge("list", existing or [], extracted or [])
+        return self._registry.merge("string", existing or "", extracted or "")

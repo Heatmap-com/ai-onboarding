@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from brief_scout.application.services.journey_renderer import JourneyRenderer
 from brief_scout.domain.models.intake import IntakeData
 from brief_scout.domain.models.journey import IntakeJourney, JourneyField
 from brief_scout.infrastructure.config.journey_loader import JourneyLoader
@@ -103,7 +104,8 @@ class TestIntakeJourney:
         )
         competitors = journey.get_field("competitors")
         assert competitors is not None
-        question = journey.render_question(competitors, data)
+        renderer = JourneyRenderer()
+        question = renderer.render_question(journey, competitors, data)
         assert "Got it — Nike." in question
         assert "Who are the competitors?" in question
 
@@ -112,7 +114,8 @@ class TestIntakeJourney:
         data = IntakeData(first_name="Alex")
         brand_field = journey.get_field("brand_name")
         assert brand_field is not None
-        question = journey.render_question(brand_field, data)
+        renderer = JourneyRenderer()
+        question = renderer.render_question(journey, brand_field, data)
         assert "Alex" in question
 
 
@@ -179,15 +182,17 @@ class TestLoadedJourney:
             target_customer="athletes",
             additional_context="Focus on sustainability",
         )
+        renderer = JourneyRenderer()
         for field in loaded_journey.fields:
             if field.ask_when_missing:
-                rendered = loaded_journey.render_question(field, sample)
+                rendered = renderer.render_question(loaded_journey, field, sample)
                 assert isinstance(rendered, str)
                 assert rendered.strip()
 
     def test_researching_template_renders(self, loaded_journey: IntakeJourney) -> None:
         """The researching transition template should render without error."""
         sample = IntakeData(first_name="Alex", brand_name="Nike")
-        message = loaded_journey.render_researching_message(sample)
+        renderer = JourneyRenderer()
+        message = renderer.render_researching_message(loaded_journey, sample)
         assert "Alex" in message
         assert "research" in message.lower()
