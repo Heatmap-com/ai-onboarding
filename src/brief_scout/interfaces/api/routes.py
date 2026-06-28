@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from brief_scout.application.dto import (
@@ -29,51 +29,36 @@ from brief_scout.application.dto import (
     MessageRequest,
     SessionResponse,
 )
-from brief_scout.domain.models import (
-    BrandAuditResult,
-    ChatSession,
-    CompetitorScanResult,
-    CreativeDirections,
-    CustomerVoiceResult,
-    HookMiningResult,
-    IntakeData,
-    ResearchBundle,
-    TrendPulseResult,
+from brief_scout.application.services import BriefGenerationPipeline, PipelineEvent
+from brief_scout.domain.models import ChatSession
+from brief_scout.domain.ports.config_port import ConfigurationPort  # noqa: TC001
+from brief_scout.domain.ports.storage_port import BriefStoragePort  # noqa: TC001
+from brief_scout.interfaces.api.dependencies import (
+    get_config,
+    get_pipeline,
+    get_storage,
 )
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
-
-    from brief_scout.application.use_cases import (
-        IntakeUseCase,
-        ResearchUseCase,
-        SynthesisUseCase,
-    )
 
 router = APIRouter(prefix="/api/v1")
 
 
 @router.post("/chat/sessions", response_model=SessionResponse)
 async def create_session(
-    request: Request,
+    storage: Annotated[BriefStoragePort, Depends(get_storage)],
 ) -> SessionResponse:
     """Create a new chat session.
 
     Returns a fresh session with a generated UUID and ``intaking`` status.
-
-    Args:
-        request: FastAPI request object (for accessing app.state).
-
-    Returns:
-        SessionResponse with the new session ID and metadata.
     """
     session = ChatSession()
-    storage = request.app.state.storage
     await storage.save_session(session)
 
     return SessionResponse(
         session_id=session.session_id,
-        status=session.status,
+        status=session.status.value,
         created_at=session.created_at,
     )
 
@@ -82,42 +67,32 @@ async def create_session(
 async def send_message(
     session_id: str,
     request_body: MessageRequest,
-    request: Request,
+    storage: Annotated[BriefStoragePort, Depends(get_storage)],
+    pipeline: Annotated[BriefGenerationPipeline, Depends(get_pipeline)],
 ) -> ChatResponse:
     """Send a message and get the assistant response.
 
-    Looks up the session, processes the message through the intake use
-    case, and returns the assistant's reply.
-
-    Args:
-        session_id: The session identifier from the URL path.
-        request_body: MessageRequest containing the user's message.
-        request: FastAPI request object (for accessing app.state).
-
-    Returns:
-        ChatResponse with the assistant's message and session status.
-
-    Raises:
-        HTTPException: 404 if session not found.
+    Uses the brief generation pipeline's intake stage. If intake completes,
+    research and synthesis are also executed and the final assistant message
+    is returned.
     """
-    storage = request.app.state.storage
-    intake_use_case: IntakeUseCase = request.app.state.intake_use_case
-
     session = await storage.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    result = await intake_use_case.process_message(
-        session,
-        request_body.message,
-    )
-
-    extracted_data: dict[str, Any] = result.extracted_data.model_dump()
+    assistant_message = ""
+    extracted_data: dict[str, Any] = {}
+    async for event in pipeline.run(session, request_body.message):
+        if event.stage == "intake":
+            assistant_message = event.payload.get("message", "")
+            extracted_data = event.payload.get("extracted_data", {})
+        if event.stage == "complete":
+            break
 
     return ChatResponse(
-        message=result.assistant_message,
+        message=assistant_message,
         session_id=session_id,
-        status=result.updated_session.status,
+        status=session.status.value,
         extracted_data=extracted_data,
     )
 
@@ -126,216 +101,54 @@ async def send_message(
 async def stream_message(
     session_id: str,
     message: str,
-    request: Request,
+    storage: Annotated[BriefStoragePort, Depends(get_storage)],
+    pipeline: Annotated[BriefGenerationPipeline, Depends(get_pipeline)],
 ) -> EventSourceResponse:
     """SSE endpoint for streaming the full pipeline.
 
-    Streams events in real-time as the pipeline executes:
+    Streams events in real-time as the brief generation pipeline executes:
         1. ``intake``       — Intake processing result
         2. ``research``     — Research phase started
-        3. ``research_step``— Individual research call completed (x5)
+        3. ``research_step``— Individual research call completed
         4. ``synthesis``    — Synthesis started/completed
         5. ``brief``        — Final brief with markdown
         6. ``error``        — On any failure (recoverable)
-
-    The research calls run sequentially within the generator so that
-    each completion can be streamed to the client immediately. Each
-    failed call yields a ``research_step`` with ``status: failed`` and
-    the pipeline continues with default (empty) results.
-
-    Args:
-        session_id: The session identifier.
-        message: The user's message text (query parameter).
-        request: FastAPI request object (for accessing app.state).
-
-    Returns:
-        EventSourceResponse streaming SSE events.
     """
-    storage = request.app.state.storage
-
     session = await storage.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
     async def _wrapped_generator() -> AsyncGenerator[dict[str, Any], None]:
         """Async generator yielding SSE events throughout the pipeline."""
-        # Resolve dependencies fresh (avoid closure issues)
-        storage_local = request.app.state.storage
-        intake_uc: IntakeUseCase = request.app.state.intake_use_case
-        research_uc: ResearchUseCase = request.app.state.research_use_case
-        synthesis_uc: SynthesisUseCase = request.app.state.synthesis_use_case
-
         try:
-            # ─── PHASE 1: INTAKE ───
-            intake_result = await intake_uc.process_message(
-                session,
-                message,
-            )
-
-            yield _make_event(
-                "intake",
-                {
-                    "message": intake_result.assistant_message,
-                    "is_complete": intake_result.is_complete,
-                    "session_id": session_id,
-                    "status": intake_result.updated_session.status,
-                },
-            )
-
-            # If intake not complete, stream ends after intake event
-            if not intake_result.is_complete:
-                return
-
-            # ─── PHASE 2: RESEARCH ───
-            yield _make_event(
-                "research",
-                {
-                    "status": "started",
-                    "steps": [
-                        "Brand Audit",
-                        "Competitor Scan",
-                        "Trend Pulse",
-                        "Customer Voice",
-                        "Hook Mining",
-                    ],
-                },
-            )
-
-            # Use extracted intake data directly
-            intake_data = intake_result.extracted_data
-
-            # Execute 5 research calls with individual step events
-            research_calls: list[tuple[str, Any]] = [
-                ("Brand Audit", research_uc._call_brand_audit),
-                ("Competitor Scan", research_uc._call_competitor_scan),
-                ("Trend Pulse", research_uc._call_trend_pulse),
-                ("Customer Voice", research_uc._call_customer_voice),
-                ("Hook Mining", research_uc._call_hook_mining),
-            ]
-
-            default_map: dict[str, Any] = {
-                "Brand Audit": BrandAuditResult(),
-                "Competitor Scan": CompetitorScanResult(),
-                "Trend Pulse": TrendPulseResult(),
-                "Customer Voice": CustomerVoiceResult(),
-                "Hook Mining": HookMiningResult(),
-            }
-
-            research_results: list[Any] = []
-            for step_name, call_method in research_calls:
-                try:
-                    result = await call_method(intake_data)
-                    research_results.append(result)
-                    yield _make_event(
-                        "research_step",
-                        {"name": step_name, "status": "complete"},
-                    )
-                except Exception as step_exc:
-                    research_results.append(default_map[step_name])
-                    yield _make_event(
-                        "research_step",
-                        {
-                            "name": step_name,
-                            "status": "failed",
-                            "error": str(step_exc),
-                        },
-                    )
-
-            # Assemble ResearchBundle from results
-            research_bundle = ResearchBundle(
-                brand_audit=research_results[0]
-                if isinstance(research_results[0], BrandAuditResult)
-                else BrandAuditResult(),
-                competitor_scan=research_results[1]
-                if isinstance(research_results[1], CompetitorScanResult)
-                else CompetitorScanResult(),
-                trend_pulse=research_results[2]
-                if isinstance(research_results[2], TrendPulseResult)
-                else TrendPulseResult(),
-                customer_voice=research_results[3]
-                if isinstance(research_results[3], CustomerVoiceResult)
-                else CustomerVoiceResult(),
-                hook_mining=research_results[4]
-                if isinstance(research_results[4], HookMiningResult)
-                else HookMiningResult(),
-            )
-
-            # ─── PHASE 3: SYNTHESIS ───
-            yield _make_event("synthesis", {"status": "started"})
-
-            brief = await synthesis_uc.execute(intake_data, research_bundle)
-            await storage_local.save_brief(session_id, brief)
-
-            # Update session status to complete
-            session.status = "complete"
-            await storage_local.save_session(session)
-
-            yield _make_event("synthesis", {"status": "complete"})
-
-            # ─── PHASE 4: BRIEF ───
-            markdown = brief.to_markdown()
-            yield _make_event(
-                "brief",
-                {
-                    "brief": brief.model_dump(),
-                    "markdown": markdown,
-                    "session_id": session_id,
-                },
-            )
-
+            async for event in pipeline.run(session, message):
+                yield _make_event(event)
         except Exception as exc:
             yield _make_event(
-                "error",
-                {
-                    "message": str(exc),
-                    "recoverable": True,
-                    "session_id": session_id,
-                },
+                PipelineEvent(
+                    stage="error",
+                    status="failed",
+                    payload={
+                        "message": str(exc),
+                        "recoverable": True,
+                        "session_id": session_id,
+                    },
+                )
             )
 
     return EventSourceResponse(_wrapped_generator())
 
 
-def _dict_to_intake_data(data: dict[str, Any]) -> IntakeData:
-    """Convert a plain dict to IntakeData, handling nested structures.
-
-    Args:
-        data: Dictionary (possibly from JSON or model_dump) with intake
-            fields, including nested ``creative_directions``.
-
-    Returns:
-        Validated IntakeData instance.
-    """
-    if "creative_directions" in data and isinstance(data["creative_directions"], dict):
-        cd = data["creative_directions"]
-        data["creative_directions"] = CreativeDirections(
-            explore=cd.get("explore", []),
-            avoid=cd.get("avoid", []),
-        )
-    return IntakeData.model_validate(data)
-
-
-def _make_event(
-    event_type: str,
-    data: dict[str, Any],
-) -> dict[str, Any]:
-    """Build an SSE event dictionary.
-
-    Args:
-        event_type: The event type string (e.g., ``"intake"``, ``"brief"``).
-        data: Event payload data.
-
-    Returns:
-        Dictionary with ``event`` key for the event type and ``data``
-        key containing a JSON-serialized payload.
-    """
+def _make_event(event: PipelineEvent) -> dict[str, Any]:
+    """Convert a PipelineEvent to an SSE event dictionary."""
     return {
-        "event": event_type,
+        "event": event.stage,
         "data": json.dumps(
             {
-                "type": event_type,
+                "type": event.stage,
+                "status": event.status,
                 "timestamp": datetime.now(UTC).isoformat(),
-                **data,
+                **event.payload,
             },
             default=str,
         ),
@@ -345,21 +158,9 @@ def _make_event(
 @router.get("/briefs/{session_id}", response_model=BriefResponse)
 async def get_brief(
     session_id: str,
-    request: Request,
+    storage: Annotated[BriefStoragePort, Depends(get_storage)],
 ) -> BriefResponse:
-    """Retrieve a generated brief by session ID.
-
-    Args:
-        session_id: The session identifier.
-        request: FastAPI request object (for accessing app.state).
-
-    Returns:
-        BriefResponse with the brief and markdown rendering.
-
-    Raises:
-        HTTPException: 404 if brief not found for the session.
-    """
-    storage = request.app.state.storage
+    """Retrieve a generated brief by session ID."""
     brief = await storage.get_brief(session_id)
 
     if brief is None:
@@ -377,20 +178,9 @@ async def get_brief(
 
 @router.get("/health", response_model=HealthResponse)
 async def health_check(
-    request: Request,
+    config: Annotated[ConfigurationPort, Depends(get_config)],
 ) -> HealthResponse:
-    """Health check endpoint.
-
-    Returns service status, version, and available LLM providers.
-
-    Args:
-        request: FastAPI request object (for accessing app.state).
-
-    Returns:
-        HealthResponse with service metadata.
-    """
-    config = request.app.state.config
-
+    """Health check endpoint."""
     providers = list(config.app_config.llm_providers.keys())
 
     return HealthResponse(

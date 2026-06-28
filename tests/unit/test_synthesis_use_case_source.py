@@ -11,6 +11,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from brief_scout.application.services.synthesis_prompt_builder import (
+    SynthesisPromptBuilder,
+)
 from brief_scout.application.use_cases.synthesis_use_case import SynthesisUseCase
 from brief_scout.domain.errors import SynthesisError
 from brief_scout.domain.models import (
@@ -110,8 +113,12 @@ class TestSynthesisUseCase:
         complete_intake_data: IntakeData,
         research_bundle: ResearchBundle,
     ) -> None:
-        """_build_synthesis_prompt should include serialized intake and research."""
-        prompt = use_case._build_synthesis_prompt(complete_intake_data, research_bundle)
+        """SynthesisPromptBuilder should include serialized intake and research."""
+        prompt = SynthesisPromptBuilder().build(
+            use_case._config.app_config.prompts.synthesis,
+            complete_intake_data,
+            research_bundle,
+        )
 
         assert "Nike" in prompt.user
         assert "brand_audit" in prompt.user

@@ -3,20 +3,21 @@
 A Journey describes the fields to collect, their types, whether they are
 required, the templates used to ask about them, and how they are merged.
 The IntakeUseCase drives the conversation directly from this schema.
+
+Rendering of templates has been moved to ``JourneyRenderer`` so the domain
+model stays independent of any templating engine.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
-from jinja2 import Template
 from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from brief_scout.domain.models.intake import IntakeData
 
-
-FieldType = Literal["string", "list", "object"]
+FieldType = str
 
 
 class ObjectProperty(BaseModel):
@@ -33,14 +34,17 @@ class JourneyField(BaseModel):
 
     Attributes:
         name: Attribute name on IntakeData.
-        type: Field type — string, list, or object.
+        type: Field type — e.g. ``string``, ``list``, ``object``. The type
+            system is open; new handlers can be registered in
+            ``IntakeDataMerger`` without changing this model.
         required: Whether the field must be filled before research can start.
         ask_when_missing: Whether the assistant should explicitly ask for this
             field when it is empty. Some optional fields (e.g. brand_url) may be
             gathered opportunistically rather than asked about directly.
-        question_template: Jinja2 template for the question asked when this field
-            is missing. The IntakeData instance is available as the template context.
-        acknowledgement_template: Jinja2 template rendered as part of the preamble
+        question_template: Template for the question asked when this field
+            is missing. The IntakeData instance is available as the template
+            context.
+        acknowledgement_template: Template rendered as part of the preamble
             once this field has been collected. Empty strings are skipped.
         properties: For object-typed fields, the sub-fields that can be merged.
     """
@@ -66,27 +70,13 @@ class JourneyField(BaseModel):
             return all(not getattr(value, prop.name, None) for prop in self.properties)
         return not str(value).strip()
 
-    def render_question(self, intake_data: IntakeData) -> str:
-        """Render this field's question template against the intake data."""
-        return Template(self.question_template).render(
-            **intake_data.model_dump(),
-        )
-
-    def render_acknowledgement(self, intake_data: IntakeData) -> str:
-        """Render this field's acknowledgement template against the intake data."""
-        if not self.acknowledgement_template:
-            return ""
-        return Template(self.acknowledgement_template).render(
-            **intake_data.model_dump(),
-        )
-
 
 class IntakeJourney(BaseModel):
     """Declarative schema for the entire conversational intake flow.
 
     Attributes:
         fields: Ordered list of fields to collect.
-        researching_template: Jinja2 template rendered when intake is complete
+        researching_template: Template rendered when intake is complete
             and the assistant is about to start research.
     """
 
@@ -159,45 +149,3 @@ class IntakeJourney(BaseModel):
             )
             is None
         )
-
-    def render_question(
-        self,
-        field: JourneyField,
-        intake_data: IntakeData,
-    ) -> str:
-        """Render a question for ``field`` plus context-aware acknowledgements."""
-        acknowledgements: list[str] = []
-        for f in self.fields:
-            if f.name == field.name:
-                continue
-            if f.is_empty(getattr(intake_data, f.name)):
-                continue
-            ack = f.render_acknowledgement(intake_data)
-            if ack:
-                acknowledgements.append(ack)
-
-        question = field.render_question(intake_data)
-
-        if acknowledgements:
-            return f"{' '.join(acknowledgements)} {question}"
-        return question
-
-    def render_researching_message(self, intake_data: IntakeData) -> str:
-        """Render the transition message when intake is complete."""
-        return Template(self.researching_template).render(
-            **intake_data.model_dump(),
-        )
-
-    def render_extraction_schema(self) -> str:
-        """Render a JSON schema snippet describing all fields for LLM extraction."""
-        lines: list[str] = ["{"]
-        for field in self.fields:
-            if field.type == "list":
-                lines.append(f'  "{field.name}": [],')
-            elif field.type == "object":
-                props = ", ".join(f'"{p.name}": []' for p in field.properties)
-                lines.append(f'  "{field.name}": {{{props}}},')
-            else:
-                lines.append(f'  "{field.name}": "",')
-        lines.append("}")
-        return "\n".join(lines)

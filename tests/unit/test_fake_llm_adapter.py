@@ -18,6 +18,9 @@ from brief_scout.domain.errors import LLMCallError
 from brief_scout.domain.models.research import BrandAuditResult
 from brief_scout.domain.ports.llm_port import Prompt
 from brief_scout.infrastructure.llm.fake_llm_adapter import FakeLLMAdapter
+from brief_scout.infrastructure.llm.test_fake_llm_adapter import (
+    TestFakeLLMAdapter as FakeLLMTestAdapter,
+)
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "llm_responses"
 
@@ -43,9 +46,9 @@ class _TestBrandResult(BaseModel):
 
 
 @pytest.fixture
-def fake_llm() -> FakeLLMAdapter:
+def fake_llm() -> FakeLLMTestAdapter:
     """Provide a FakeLLMAdapter loaded with test fixtures."""
-    return FakeLLMAdapter(
+    return FakeLLMTestAdapter(
         fixture_dir=str(FIXTURE_DIR),
         default_fixture="default",
         latency_ms=10.0,
@@ -134,7 +137,7 @@ class TestFakeLLMAdapter:
         assert "Nike" in result.brand_positioning
 
     @pytest.mark.asyncio
-    async def test_should_record_call_in_log(self, fake_llm: FakeLLMAdapter) -> None:
+    async def test_should_record_call_in_log(self, fake_llm: FakeLLMTestAdapter) -> None:
         """Each call should be recorded in the call log."""
         prompt = Prompt(user="nike customer voice")
         await fake_llm.complete(prompt)
@@ -146,7 +149,7 @@ class TestFakeLLMAdapter:
         assert "fixture_name" in last_call
 
     @pytest.mark.asyncio
-    async def test_should_clear_call_log(self, fake_llm: FakeLLMAdapter) -> None:
+    async def test_should_clear_call_log(self, fake_llm: FakeLLMTestAdapter) -> None:
         """clear_call_log() should empty the call log."""
         prompt = Prompt(user="nike")
         await fake_llm.complete(prompt)
@@ -227,19 +230,21 @@ class TestFakeLLMAdapter:
         assert adapter._fixtures == {}
 
     @pytest.mark.asyncio
-    async def test_should_handle_non_dict_response_in_structured(
-        self, fake_llm: FakeLLMAdapter
-    ) -> None:
-        """complete_structured() should return default when response is not a dict."""
-        prompt = Prompt(user="anything")
-        result = await fake_llm.complete_structured(
-            prompt, _TestBrandResult, config={"fixture_name": "default/default"}
+    async def test_should_raise_on_non_dict_response_in_structured(self, tmp_path: Path) -> None:
+        """complete_structured() should raise LLMCallError when response is not a dict."""
+        bad_dir = tmp_path / "bad_fixtures"
+        bad_dir.mkdir()
+        (bad_dir / "list.json").write_text(
+            json.dumps({"_meta": {"match_keywords": ["list"]}, "response": ["not", "a", "dict"]})
         )
-        assert isinstance(result, _TestBrandResult)
+        adapter = FakeLLMAdapter(fixture_dir=str(bad_dir), default_fixture="default")
+        prompt = Prompt(user="list")
+        with pytest.raises(LLMCallError):
+            await adapter.complete_structured(prompt, _TestBrandResult)
 
     @pytest.mark.asyncio
-    async def test_should_handle_unparseable_response_in_structured(self, tmp_path: Path) -> None:
-        """complete_structured() should return default when JSON parsing fails."""
+    async def test_should_raise_on_unparseable_response_in_structured(self, tmp_path: Path) -> None:
+        """complete_structured() should raise LLMCallError when JSON parsing fails."""
         bad_dir = tmp_path / "bad_fixtures2"
         bad_dir.mkdir()
         (bad_dir / "bad.json").write_text(
@@ -247,8 +252,8 @@ class TestFakeLLMAdapter:
         )
         adapter = FakeLLMAdapter(fixture_dir=str(bad_dir), default_fixture="default")
         prompt = Prompt(user="bad")
-        result = await adapter.complete_structured(prompt, _TestBrandResult)
-        assert isinstance(result, _TestBrandResult)
+        with pytest.raises(LLMCallError):
+            await adapter.complete_structured(prompt, _TestBrandResult)
 
     @pytest.mark.asyncio
     async def test_should_raise_on_default_instantiation_failure(self, tmp_path: Path) -> None:

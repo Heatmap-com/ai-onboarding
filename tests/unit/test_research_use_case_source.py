@@ -11,6 +11,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from brief_scout.application.services.research_prompt_builder import (
+    ResearchPromptBuilder,
+)
 from brief_scout.application.use_cases.research_use_case import ResearchUseCase
 from brief_scout.domain.models import (
     BrandAuditResult,
@@ -21,6 +24,8 @@ from brief_scout.domain.models import (
     ResearchBundle,
     TrendPulseResult,
 )
+from brief_scout.domain.models.config import PromptTemplateConfig
+from brief_scout.domain.services.category_classifier import CategoryClassifier
 from brief_scout.infrastructure.config.yaml_config_adapter import (
     YAMLConfigAdapter,
 )
@@ -114,29 +119,31 @@ class TestResearchUseCase:
         assert isinstance(bundle.hook_mining, HookMiningResult)
 
     @pytest.mark.asyncio
-    async def test_should_infer_category_from_intake(self) -> None:
-        """_infer_category should map known keywords to categories."""
+    async def test_should_classify_category_from_intake(self) -> None:
+        """CategoryClassifier should map known keywords to categories."""
         intake = IntakeData(
             brand_name="SaaS Co",
             target_customer="software buyers",
         )
-        category = ResearchUseCase._infer_category(intake)
+        classifier = CategoryClassifier()
+        category = classifier.classify(intake)
         assert category == "technology / software"
 
-    def test_should_infer_general_category_by_default(self) -> None:
-        """_infer_category should return 'general' when no keywords match."""
+    def test_should_classify_general_category_by_default(self) -> None:
+        """CategoryClassifier should return 'general' when no keywords match."""
         intake = IntakeData(brand_name="Xyz", target_customer="everyone")
-        assert ResearchUseCase._infer_category(intake) == "general"
+        classifier = CategoryClassifier()
+        assert classifier.classify(intake) == "general"
 
-    @pytest.mark.asyncio
-    async def test_should_format_prompt_with_placeholders(
-        self,
-        config: YAMLConfigAdapter,
-    ) -> None:
-        """_format_prompt should substitute placeholders in user template."""
-        template = config.get_prompt_template("research_brand_audit")
-        prompt = ResearchUseCase._format_prompt(
-            template, brand_name="Nike", brand_url="https://nike.com"
+    def test_should_build_prompt_with_placeholders(self) -> None:
+        """ResearchPromptBuilder should substitute placeholders in user template."""
+        template = PromptTemplateConfig(
+            system="system",
+            user="Brand: {brand_name}, URL: {brand_url}",
+        )
+        prompt = ResearchPromptBuilder().build(
+            template,
+            {"brand_name": "Nike", "brand_url": "https://nike.com"},
         )
 
         assert "Nike" in prompt.user

@@ -20,19 +20,27 @@ from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 
+from brief_scout.application.services import BriefGenerationPipeline
 from brief_scout.application.use_cases import (
     IntakeUseCase,
     ResearchUseCase,
     SynthesisUseCase,
 )
 from brief_scout.domain.services import CompletenessChecker, IntakeDataMerger
+from brief_scout.infrastructure.factories import (
+    ConfigAdapterFactory,
+    JourneySourceFactory,
+    LLMAdapterFactory,
+    StorageAdapterFactory,
+    TelemetryAdapterFactory,
+)
+from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 from brief_scout.interfaces.api import router
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-    from brief_scout.domain.models.config import LLMProviderConfig
-    from brief_scout.domain.ports import LLMPort, TelemetryPort
+    from brief_scout.domain.ports.journey_source_port import JourneySource
     from brief_scout.domain.ports.storage_port import BriefStoragePort
 
 
@@ -43,23 +51,14 @@ def create_app(
     """Create and configure the FastAPI application.
 
     The composition root:
-        1. Load configuration via YAMLConfigAdapter.
-        2. Create telemetry adapter (local file).
-        3. Create storage adapter (in-memory or file system).
-        4. Create LLM adapter (FakeLLMAdapter from config).
-        5. Wire use cases with injected dependencies.
-        6. Create FastAPI app, include router.
-        7. Store all dependencies on app.state.
-
-    Args:
-        config_dir: Path to configuration directory. Defaults to
-            ``./config`` relative to the project root.
-        env: Environment name (e.g., ``development``, ``production``).
-            Defaults to the ``BRIEF_SCOUT_ENV`` environment variable
-            or ``development``.
-
-    Returns:
-        Configured FastAPI application with all routes and dependencies.
+        1. Load configuration via ConfigAdapterFactory.
+        2. Create telemetry adapter via TelemetryAdapterFactory.
+        3. Create storage adapter via StorageAdapterFactory.
+        4. Create LLM adapter via LLMAdapterFactory.
+        5. Load journey via JourneySourceFactory.
+        6. Wire use cases and the brief generation pipeline.
+        7. Create FastAPI app, include router.
+        8. Store dependencies on app.state.
     """
     # Resolve configuration
     if config_dir is None:
@@ -68,21 +67,13 @@ def create_app(
         env = os.environ.get("BRIEF_SCOUT_ENV", "development")
 
     # ─── 1. Configuration ───
-    from brief_scout.infrastructure.config.yaml_config_adapter import (
-        YAMLConfigAdapter,
-    )
-
-    config = YAMLConfigAdapter(config_dir=config_dir, env=env)
+    config = ConfigAdapterFactory().create(config_dir=config_dir, env=env)
     app_config = config.app_config
 
     # ─── 2. Telemetry ───
-    from brief_scout.infrastructure.telemetry.local_file_adapter import (
-        LocalFileTelemetryAdapter,
-    )
-
-    telemetry = LocalFileTelemetryAdapter(
-        log_dir=app_config.telemetry.log_dir,
-        log_level=app_config.telemetry.log_level,
+    telemetry = TelemetryAdapterFactory().create(
+        adapter_id=app_config.telemetry.adapter,
+        config=app_config.telemetry,
     )
     telemetry.log(
         "Application starting",
@@ -93,48 +84,40 @@ def create_app(
     )
 
     # ─── 3. Storage ───
-    storage_adapter_name = app_config.storage_adapter
-    storage: BriefStoragePort
-    if storage_adapter_name == "file_system":
-        from brief_scout.infrastructure.storage.file_system_adapter import (
-            FileSystemStorageAdapter,
-        )
-
-        storage = FileSystemStorageAdapter(data_dir="./data")
-    else:
-        from brief_scout.infrastructure.storage.in_memory_adapter import (
-            InMemoryStorageAdapter,
-        )
-
-        storage = InMemoryStorageAdapter()
-
+    data_dir = os.environ.get("BRIEF_SCOUT_DATA_DIR", "./data")
+    storage: BriefStoragePort = StorageAdapterFactory().create(
+        adapter_id=app_config.storage_adapter,
+        data_dir=data_dir,
+        logger=telemetry,
+    )
     telemetry.log(
-        f"Storage adapter initialized: {storage_adapter_name}",
+        f"Storage adapter initialized: {app_config.storage_adapter}",
         level="DEBUG",
     )
 
     # ─── 4. LLM Adapter ───
     provider_name = app_config.default_llm_provider
     provider_config = config.get_provider_config(provider_name)
-
-    # Import and instantiate the adapter class from config
-    llm = _create_llm_adapter(provider_config, telemetry)
+    llm = LLMAdapterFactory().create(provider_config, telemetry=telemetry)
     telemetry.log(
         f"LLM adapter initialized: {llm.provider_name}",
         level="DEBUG",
     )
 
     # ─── 5. Journey + Domain Services ───
-    from brief_scout.infrastructure.config.journey_loader import JourneyLoader
-
-    journey = JourneyLoader(config_dir=config_dir, env=env).load()
+    journey_source: JourneySource = JourneySourceFactory().create(
+        config_dir=config_dir,
+        env=env,
+    )
+    journey = journey_source.load()
+    template_renderer = Jinja2TemplateRenderer()
     completeness_checker = CompletenessChecker(
         journey=journey,
         telemetry=telemetry,
     )
     merger = IntakeDataMerger(journey=journey)
 
-    # ─── 6. Use Cases (with dependency injection) ───
+    # ─── 6. Use Cases + Pipeline ───
     intake_use_case = IntakeUseCase(
         llm=llm,
         config=config,
@@ -155,27 +138,32 @@ def create_app(
         telemetry=telemetry,
     )
 
+    # Build the research pipeline from the configured research steps.
+    # ResearchUseCase is the composition helper that knows how to map prompts
+    # and LLM adapters onto the pluggable ResearchPipeline.
+    research_pipeline = research_use_case._build_pipeline()
+    pipeline = BriefGenerationPipeline(
+        intake_use_case=intake_use_case,
+        research_pipeline=research_pipeline,
+        synthesis_use_case=synthesis_use_case,
+        storage=storage,
+    )
+
     # ─── 7. FastAPI Application ───
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         """Application lifespan — startup and shutdown hooks."""
-        telemetry.log(
-            "Application startup complete",
-            level="INFO",
-        )
+        telemetry.log("Application startup complete", level="INFO")
         yield
-        telemetry.log(
-            "Application shutting down",
-            level="INFO",
-        )
+        telemetry.log("Application shutting down", level="INFO")
 
     app = FastAPI(
         title=app_config.app_name,
         version=app_config.app_version,
         description=(
             "Conversational brief intake + research agent. "
-            "Chat through 5-7 natural questions, then the system "
-            "extracts structured data, fires 5 parallel research calls, "
+            "Chat through natural questions, then the system "
+            "extracts structured data, runs research, "
             "and synthesizes a fully populated creative brief."
         ),
         lifespan=lifespan,
@@ -191,9 +179,12 @@ def create_app(
     app.state.llm = llm
     app.state.completeness_checker = completeness_checker
     app.state.journey = journey
+    app.state.template_renderer = template_renderer
     app.state.intake_use_case = intake_use_case
     app.state.research_use_case = research_use_case
     app.state.synthesis_use_case = synthesis_use_case
+    app.state.research_pipeline = research_pipeline
+    app.state.pipeline = pipeline
 
     telemetry.log(
         "Application factory complete — all dependencies wired",
@@ -201,58 +192,6 @@ def create_app(
     )
 
     return app
-
-
-def _create_llm_adapter(
-    provider_config: LLMProviderConfig,
-    telemetry: TelemetryPort,
-) -> LLMPort:
-    """Dynamically instantiate the configured LLM adapter.
-
-    Supports:
-        - ``brief_scout.infrastructure.llm.fake_llm_adapter.FakeLLMAdapter``
-        - Future real adapters via adapter_class config.
-
-    Args:
-        provider_config: Configuration for the LLM provider.
-        telemetry: Telemetry adapter for the LLM to use.
-
-    Returns:
-        Instantiated LLMPort implementation.
-    """
-    adapter_class_path = provider_config.adapter_class
-
-    # Default to FakeLLMAdapter if not specified
-    if not adapter_class_path or adapter_class_path.endswith("FakeLLMAdapter"):
-        from brief_scout.infrastructure.llm.fake_llm_adapter import (
-            FakeLLMAdapter,
-        )
-
-        extras = provider_config.model_extra or {}
-        return FakeLLMAdapter(
-            fixture_dir=extras.get("fixture_dir", "tests/fixtures/llm_responses"),
-            default_fixture=extras.get("default_fixture", "default"),
-            latency_ms=extras.get("latency_ms", 50.0),
-            telemetry=telemetry,
-            demo_journey_path=extras.get("demo_journey_path"),
-        )
-
-    # Dynamic import for other adapter classes
-    module_path, class_name = adapter_class_path.rsplit(".", 1)
-    import importlib
-
-    module = importlib.import_module(module_path)
-    adapter_cls = getattr(module, class_name)
-    adapter = adapter_cls(
-        api_key=provider_config.api_key,
-        base_url=provider_config.base_url,
-        model=provider_config.model,
-        temperature=provider_config.temperature,
-        max_tokens=provider_config.max_tokens,
-        timeout_seconds=provider_config.timeout_seconds,
-        telemetry=telemetry,
-    )
-    return adapter  # type: ignore[no-any-return]
 
 
 def main() -> None:
@@ -263,7 +202,6 @@ def main() -> None:
     port = int(os.environ.get("BRIEF_SCOUT_PORT", "8000"))
     reload = os.environ.get("BRIEF_SCOUT_RELOAD", "false").lower() == "true"
 
-    # Use the factory pattern — uvicorn calls create_app()
     uvicorn.run(
         "brief_scout.main:create_app",
         host=host,

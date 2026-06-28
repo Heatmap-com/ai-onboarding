@@ -1,9 +1,13 @@
-"""Storage Port — contract for brief and session persistence.
+"""Storage Port — composite contract for brief and session persistence.
 
-Adapters implementing this Protocol handle the mechanics of persisting
-chat sessions and generated briefs. The domain layer depends only on
-this interface, allowing transparent swapping between in-memory, file
-system, and database storage backends.
+This module now composes the narrow storage ports:
+  - SessionStoragePort
+  - BriefStoragePort
+  - SessionLister
+
+Adapters implementing BriefStoragePort (the composite) must satisfy all
+three narrow contracts. Depend on the narrow ports in application/domain
+code and use the composite only for composition-root wiring.
 """
 
 from __future__ import annotations
@@ -16,50 +20,25 @@ if TYPE_CHECKING:
 
 
 class BriefStoragePort(Protocol):
-    """Port for brief and session persistence.
+    """Composite port for brief and session persistence.
 
-    Implementations may store data in memory, on the file system,
-    or in external databases. All operations are async to support
-    non-blocking I/O.
+    Implements SessionStoragePort + BriefStoragePort + SessionLister.
     """
 
     async def save_session(self, session: ChatSession) -> None:
-        """Save a chat session.
-
-        Args:
-            session: The ChatSession to persist.
-        """
+        """Save a chat session."""
         ...
 
     async def get_session(self, session_id: str) -> ChatSession | None:
-        """Retrieve a chat session by ID.
-
-        Args:
-            session_id: The unique session identifier.
-
-        Returns:
-            The ChatSession if found, None otherwise.
-        """
+        """Retrieve a chat session by ID."""
         ...
 
     async def save_brief(self, session_id: str, brief: Brief) -> None:
-        """Save a generated brief associated with a session.
-
-        Args:
-            session_id: The session identifier to associate the brief with.
-            brief: The Brief to persist.
-        """
+        """Save a generated brief associated with a session."""
         ...
 
     async def get_brief(self, session_id: str) -> Brief | None:
-        """Retrieve a brief by its associated session ID.
-
-        Args:
-            session_id: The session identifier the brief is associated with.
-
-        Returns:
-            The Brief if found, None otherwise.
-        """
+        """Retrieve a brief by its associated session ID."""
         ...
 
     async def list_sessions(self, limit: int = 100) -> list[ChatSession]:

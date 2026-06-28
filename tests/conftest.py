@@ -121,8 +121,7 @@ class InMemoryStorageAdapter:
 class FakeLLMAdapter:
     """Deterministic LLM adapter that returns fixture-based responses.
 
-    Loads JSON fixture files from a directory structure. Uses pattern matching
-    on the prompt to select the appropriate fixture.
+    This is the test-fixture version that keeps a call log for verification.
     """
 
     def __init__(
@@ -147,18 +146,15 @@ class FakeLLMAdapter:
         for json_file in self.fixture_dir.rglob("*.json"):
             try:
                 data = json.loads(json_file.read_text())
-                # Index by relative directory name
                 rel_parts = json_file.relative_to(self.fixture_dir).parts
                 key = "/".join(rel_parts[:-1]) + "/" + json_file.stem
                 self._fixtures[key] = data
-                self._fixtures[json_file.stem] = data  # also by stem
+                self._fixtures[json_file.stem] = data
             except (json.JSONDecodeError, OSError):
                 continue
 
     async def complete(self, prompt: Any, _config: dict[str, Any] | None = None) -> Any:
         """Return a fixture-based LLMResponse."""
-
-        # Simulate latency
         latency = self.latency_ms / 1000.0
         fixture_data = self._match_fixture(prompt)
         meta = fixture_data.get("_meta", {})
@@ -167,8 +163,6 @@ class FakeLLMAdapter:
         await asyncio.sleep(latency)
 
         response_data = fixture_data.get("response", {})
-
-        # Build a simple response object
         response_content = (
             json.dumps(response_data) if isinstance(response_data, dict) else str(response_data)
         )
@@ -219,17 +213,12 @@ class FakeLLMAdapter:
         return "fake"
 
     def _match_fixture(self, prompt: Any) -> dict[str, Any]:
-        """Pattern-match prompt content to find appropriate fixture.
-
-        Uses a scoring system: the fixture with the most keyword matches wins.
-        This ensures more specific fixtures are preferred over generic ones.
-        """
+        """Pattern-match prompt content to find appropriate fixture."""
         prompt_text = ""
         if hasattr(prompt, "user"):
             prompt_text = getattr(prompt, "user", "") or ""
         if hasattr(prompt, "system"):
             prompt_text += " " + (getattr(prompt, "system", "") or "")
-        # Also include any metadata hint for explicit fixture selection
         if hasattr(prompt, "metadata") and getattr(prompt, "metadata", None):
             meta_hint = getattr(prompt, "metadata", {})
             if "fixture" in meta_hint:
@@ -239,8 +228,6 @@ class FakeLLMAdapter:
                     return explicit
 
         prompt_lower = prompt_text.lower()
-
-        # Scoring: count matching keywords per fixture
         best_fixture: dict[str, Any] | None = None
         best_score = 0
         best_key = ""
@@ -260,7 +247,6 @@ class FakeLLMAdapter:
             self._last_fixture_key = best_key
             return best_fixture
 
-        # Default fallback
         default = self._fixtures.get(self.default_fixture, {})
         if not default:
             default = self._fixtures.get("default/default", {"_meta": {}, "response": {}})
@@ -308,6 +294,8 @@ class CompletenessChecker:
         """Evaluate intake data completeness."""
         missing: list[str] = []
 
+        if not intake_data.first_name.strip():
+            missing.append("first_name")
         if not intake_data.brand_name.strip():
             missing.append("brand_name")
         if len(intake_data.competitors) < 1:
@@ -318,9 +306,8 @@ class CompletenessChecker:
             missing.append("target_customer")
 
         is_complete = len(missing) == 0
-        confidence = (
-            intake_data.completion_score if hasattr(intake_data, "completion_score") else 0.0
-        )
+        total = len(self.REQUIRED_FIELDS)
+        confidence = (total - len(missing)) / total
 
         return CompletenessResult(
             is_complete=is_complete,
