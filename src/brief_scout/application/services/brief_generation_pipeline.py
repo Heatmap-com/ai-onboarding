@@ -92,7 +92,9 @@ class BriefGenerationPipeline:
                     payload=event.payload,
                 )
 
-            research_bundle = await self._research.execute(intake_result.extracted_data)
+            research_bundle = self._research.last_bundle or await self._research.execute(
+                intake_result.extracted_data,
+            )
 
             # ─── SYNTHESIS ───
             yield PipelineEvent(stage="synthesis", status="started")

@@ -4,16 +4,21 @@ Usage:
     uv run python scripts/run_demo.py
 
 Outputs:
-    demo_conversation.md — a Markdown chat transcript of the onboarding.
+    demo_conversation.md — a Markdown chat transcript of the onboarding,
+    including token usage and estimated cost when tracking is enabled.
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from httpx import ASGITransport, AsyncClient
+
+# Enable token/cost tracking for the demo run.
+os.environ["BRIEF_SCOUT_TRACK_TOKENS"] = "1"
 
 from brief_scout.main import create_app
 
@@ -137,8 +142,21 @@ async def run_demo() -> None:
         lines.append(markdown)
         lines.append("\n```\n")
 
+    # Append token usage / cost estimate if tracking was enabled.
+    token_usage = getattr(app.state, "token_usage", None)
+    if token_usage is not None:
+        lines.append("\n---\n")
+        lines.append("## Token Usage & Estimated Cost\n")
+        lines.append("```text\n")
+        lines.append(token_usage.summary())
+        lines.append("\n```\n")
+
     OUTPUT_FILE.write_text("".join(lines), encoding="utf-8")
     print(f"Demo transcript written to {OUTPUT_FILE}")
+
+    if token_usage is not None:
+        print("\nToken usage summary:\n")
+        print(token_usage.summary())
 
 
 if __name__ == "__main__":

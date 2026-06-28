@@ -56,6 +56,12 @@ class ResearchPipeline:
         """
         self._steps = list(steps)
         self._telemetry = telemetry
+        self._last_bundle: ResearchBundle | None = None
+
+    @property
+    def last_bundle(self) -> ResearchBundle | None:
+        """The bundle produced by the most recent ``stream`` or ``execute``."""
+        return self._last_bundle
 
     async def execute(self, intake_data: IntakeData) -> ResearchBundle:
         """Run all steps concurrently and return a populated ``ResearchBundle``."""
@@ -70,10 +76,11 @@ class ResearchPipeline:
                 continue
             results[step.name] = outcome
 
-        return ResearchBundle(
+        self._last_bundle = ResearchBundle(
             results=results,
             completed_at=datetime.now(UTC),
         )
+        return self._last_bundle
 
     async def stream(
         self,
@@ -93,6 +100,7 @@ class ResearchPipeline:
         coroutines = [self._run_step(step, intake_data) for step in self._steps]
         step_results = await asyncio.gather(*coroutines, return_exceptions=True)
 
+        results: dict[str, BaseModel] = {}
         for step, outcome in zip(self._steps, step_results, strict=True):
             if isinstance(outcome, BaseException):
                 self._log_failure(step.name, outcome)
@@ -102,12 +110,17 @@ class ResearchPipeline:
                     payload={"name": step.name, "error": str(outcome)},
                 )
             else:
+                results[step.name] = outcome
                 yield PipelineEvent(
                     stage="research_step",
                     status="complete",
                     payload={"name": step.name},
                 )
 
+        self._last_bundle = ResearchBundle(
+            results=results,
+            completed_at=datetime.now(UTC),
+        )
         yield PipelineEvent(stage="research", status="complete")
 
     async def _run_step(

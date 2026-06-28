@@ -86,8 +86,12 @@ async def send_message(
         if event.stage == "intake":
             assistant_message = event.payload.get("message", "")
             extracted_data = event.payload.get("extracted_data", {})
-        if event.stage == "complete":
-            break
+            # The non-streaming message endpoint stops once intake is complete.
+            # Research and synthesis run through the SSE /stream endpoint so
+            # clients get real-time progress and we don't execute the pipeline
+            # twice when both endpoints are used.
+            if event.payload.get("is_complete"):
+                break
 
     return ChatResponse(
         message=assistant_message,

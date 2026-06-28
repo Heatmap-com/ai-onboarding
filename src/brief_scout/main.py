@@ -34,6 +34,7 @@ from brief_scout.infrastructure.factories import (
     StorageAdapterFactory,
     TelemetryAdapterFactory,
 )
+from brief_scout.infrastructure.llm.token_tracking_adapter import TokenTrackingLLM
 from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 from brief_scout.interfaces.api import router
 
@@ -99,6 +100,20 @@ def create_app(
     provider_name = app_config.default_llm_provider
     provider_config = config.get_provider_config(provider_name)
     llm = LLMAdapterFactory().create(provider_config, telemetry=telemetry)
+
+    # Optionally wrap the LLM with token/cost tracking.
+    track_tokens = os.environ.get("BRIEF_SCOUT_TRACK_TOKENS", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+    if track_tokens:
+        llm = TokenTrackingLLM(llm, model=provider_config.model or "gpt-4o-mini")
+        telemetry.log(
+            f"Token tracking enabled for {llm.provider_name} ({llm._model})",
+            level="INFO",
+        )
+
     telemetry.log(
         f"LLM adapter initialized: {llm.provider_name}",
         level="DEBUG",
@@ -177,6 +192,9 @@ def create_app(
     app.state.telemetry = telemetry
     app.state.storage = storage
     app.state.llm = llm
+    app.state.token_usage = (
+        llm.token_usage if isinstance(llm, TokenTrackingLLM) else None
+    )
     app.state.completeness_checker = completeness_checker
     app.state.journey = journey
     app.state.template_renderer = template_renderer

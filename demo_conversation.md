@@ -1,6 +1,6 @@
 # CreativeOS Onboarding Demo
 This transcript shows a complete onboarding conversation through the Brief Scout API, configured for a CreativeOS-style workflow.
-**Session ID:** `5d694e7a-0aa4-4c23-818e-80279d31a382`
+**Session ID:** `a0be0229-5c83-48ee-bfd0-aec7b46bc05e`
 ---
 **User:** Hi! I'm Alex. I want to get my brand set up on CreativeOS. We're Nike, and our website is nike.com.
 **CreativeOS:** Got it — Nike. Thanks, Alex. Who are the top 2 or 3 competitors you want to stand apart from?
@@ -16,7 +16,7 @@ _Status: intaking_
 _Status: intaking_
 **User:** We want to explore authentic athlete stories and avoid generic celebrity endorsements.
 **CreativeOS:** Perfect — I have everything I need, Alex. I'm now running research across 5 areas: brand audit, competitor scan, trend pulse, customer voice, and hook mining. This will take just a moment...
-_Status: complete_
+_Status: researching_
 ---
 ## Pipeline Stream
 - **Intake:** Perfect — I have everything I need, Alex. I'm now running research across 5 areas: brand audit, competitor scan, trend pulse, customer voice, and hook mining. This will take just a moment... (complete=True)
@@ -42,7 +42,7 @@ _Status: complete_
 ```markdown
 # Creative Brief: Nike
 
-_Generated: 2026-06-28 20:28 UTC_
+_Generated: 2026-06-28 20:36 UTC_
 
 ---
 
@@ -146,4 +146,24 @@ Turn sustainability and supply chain transparency into creative storytelling rat
 
 _Brief Scout | CreativeOS_
 
+```
+
+---
+## Token Usage & Estimated Cost
+```text
+Call Provider   Model                        Input   Output    Total   Cost (USD)
+---------------------------------------------------------------------------------
+   1 fake       gpt-4o-mini                    137       46      183 $   0.000048
+   2 fake       gpt-4o-mini                    175       52      227 $   0.000057
+   3 fake       gpt-4o-mini                    223       56      279 $   0.000067
+   4 fake       gpt-4o-mini                    275       69      344 $   0.000083
+   5 fake       gpt-4o-mini                    323       80      403 $   0.000096
+   6 fake       gpt-4o-mini                     53      134      187 $   0.000088
+   7 fake       gpt-4o-mini                     38      302      340 $   0.000187
+   8 fake       gpt-4o-mini                     44      267      311 $   0.000167
+   9 fake       gpt-4o-mini                     57      234      291 $   0.000149
+  10 fake       gpt-4o-mini                     59      340      399 $   0.000213
+  11 fake       gpt-4o-mini                   1918      887     2805 $   0.000820
+---------------------------------------------------------------------------------
+                                     TOTAL     3302     2467     5769 $   0.001975
 ```
