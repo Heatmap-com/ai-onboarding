@@ -63,7 +63,7 @@ class LLMAdapterFactory:
         if adapter_cls is None:
             raise ValueError(f"Unknown LLM adapter_id: {adapter_id}")
 
-        extras = provider_config.model_extra or {}
+        extras = provider_config.extras
         kwargs: dict[str, Any] = {
             "api_key": provider_config.api_key,
             "base_url": provider_config.base_url or None,
