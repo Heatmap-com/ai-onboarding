@@ -38,7 +38,7 @@ journey:
       ask_when_missing: true
       question_template: |
         {% if first_name %}Thanks, {{first_name}}. {% endif %}Who are the top 2 or 3 competitors you want to stand apart from?
-      acknowledgement_template: ""
+      acknowledgement_template: "Competitors: {{competitors|join(', ')}}."
 
     - name: primary_goal
       type: string
@@ -62,7 +62,8 @@ journey:
       ask_when_missing: true
       question_template: |
         {% if first_name %}Thanks, {{first_name}}. {% endif %}Any creative directions you want to explore or definitely avoid?
-      acknowledgement_template: ""
+      acknowledgement_template: |
+        Explore: {{creative_directions.explore|join(', ')}}; avoid: {{creative_directions.avoid|join(', ')}}.
       properties:
         - name: explore
           type: list
@@ -75,4 +76,4 @@ journey:
       ask_when_missing: true
       question_template: |
         {% if first_name %}Thanks, {{first_name}}. {% endif %}Anything else I should know before I start researching?
-      acknowledgement_template: ""
+      acknowledgement_template: "Thanks for the extra context."

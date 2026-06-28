@@ -1,18 +1,18 @@
 # CreativeOS Onboarding Demo
 This transcript shows a complete onboarding conversation through the Brief Scout API, configured for a CreativeOS-style workflow.
-**Session ID:** `cf3f84bb-0f1a-468d-a61c-26aca7850c75`
+**Session ID:** `5d694e7a-0aa4-4c23-818e-80279d31a382`
 ---
 **User:** Hi! I'm Alex. I want to get my brand set up on CreativeOS. We're Nike, and our website is nike.com.
 **CreativeOS:** Got it — Nike. Thanks, Alex. Who are the top 2 or 3 competitors you want to stand apart from?
 _Status: intaking_
 **User:** Our main competitors are Adidas and Puma.
-**CreativeOS:** Got it — Nike. Thanks, Alex. What's the main thing you're trying to accomplish right now — new customer acquisition, retention, a product launch, or something else?
+**CreativeOS:** Competitors: Adidas, Puma. Thanks, Alex. What's the main thing you're trying to accomplish right now — new customer acquisition, retention, a product launch, or something else?
 _Status: intaking_
 **User:** Our primary goal is new customer acquisition.
-**CreativeOS:** Got it — Nike. Goal: new customer acquisition. Thanks, Alex. Tell us about your ideal customer. Who are you trying to reach and what do they care about?
+**CreativeOS:** Goal: new customer acquisition. Thanks, Alex. Tell us about your ideal customer. Who are you trying to reach and what do they care about?
 _Status: intaking_
 **User:** We want to reach 18-34 year old athletes who care about style and performance.
-**CreativeOS:** Got it — Nike. Goal: new customer acquisition. Target: 18-34 year old athletes who care about style and performance. Thanks, Alex. Any creative directions you want to explore or definitely avoid?
+**CreativeOS:** Target: 18-34 year old athletes who care about style and performance. Thanks, Alex. Any creative directions you want to explore or definitely avoid?
 _Status: intaking_
 **User:** We want to explore authentic athlete stories and avoid generic celebrity endorsements.
 **CreativeOS:** Perfect — I have everything I need, Alex. I'm now running research across 5 areas: brand audit, competitor scan, trend pulse, customer voice, and hook mining. This will take just a moment...
@@ -42,7 +42,7 @@ _Status: complete_
 ```markdown
 # Creative Brief: Nike
 
-_Generated: 2026-06-28 20:23 UTC_
+_Generated: 2026-06-28 20:28 UTC_
 
 ---
 

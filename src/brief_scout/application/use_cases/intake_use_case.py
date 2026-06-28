@@ -131,6 +131,9 @@ class IntakeUseCase:
             ChatMessage(role="user", content=user_message),
         )
 
+        # Snapshot current data so we can tell what was newly provided this turn.
+        previous_intake = session.intake_data.model_copy(deep=True)
+
         # Step 2: Extract structured data from conversation
         try:
             extracted = await self._extract_structured_data(session.messages)
@@ -146,6 +149,11 @@ class IntakeUseCase:
         # Step 3: Merge extracted data with existing
         merged = self._merger.merge(session.intake_data, extracted)
         session.intake_data = merged
+
+        # Identify fields that went from empty to populated this turn. The
+        # renderer uses this to acknowledge only what the user just said
+        # instead of restating the brand on every turn.
+        newly_filled = self._newly_filled_field_names(previous_intake, merged)
 
         # Step 4: Check completeness for telemetry
         completeness_result = self._completeness_checker.check(merged)
@@ -163,6 +171,7 @@ class IntakeUseCase:
                 self._journey,
                 next_field,
                 merged,
+                newly_filled=newly_filled,
             )
             if not next_field.required and next_field.name not in session.asked_optional_questions:
                 session.asked_optional_questions.append(next_field.name)
@@ -261,6 +270,21 @@ class IntakeUseCase:
                 message=f"Failed to extract structured intake data: {exc}",
                 provider=self._llm.provider_name,
             ) from exc
+
+    def _newly_filled_field_names(
+        self,
+        previous: IntakeData,
+        current: IntakeData,
+    ) -> list[str]:
+        """Return field names that went from empty to populated this turn."""
+        names: list[str] = []
+        for field in self._journey.fields:
+            value_getter = getattr
+            previous_value = value_getter(previous, field.name)
+            current_value = value_getter(current, field.name)
+            if field.is_empty(previous_value) and not field.is_empty(current_value):
+                names.append(field.name)
+        return names
 
     def _generic_extraction_config(
         self,

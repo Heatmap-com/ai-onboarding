@@ -34,17 +34,44 @@ class JourneyRenderer:
         journey: IntakeJourney,
         field: JourneyField,
         intake_data: IntakeData,
+        newly_filled: list[str] | None = None,
     ) -> str:
-        """Render a question for ``field`` plus context-aware acknowledgements."""
+        """Render a question for ``field`` plus context-aware acknowledgements.
+
+        Args:
+            journey: The intake journey schema.
+            field: The next field to ask about.
+            intake_data: Current collected intake data.
+            newly_filled: Optional names of fields that were just populated in
+                the latest turn. When provided, only those fields are
+                acknowledged, preventing the assistant from repeating stale
+                information each turn. When omitted, only the most recent
+                filled field is acknowledged.
+        """
         acknowledgements: list[str] = []
-        for f in journey.fields:
-            if f.name == field.name:
-                continue
-            if f.is_empty(getattr(intake_data, f.name)):
-                continue
-            ack = self.render_acknowledgement(f, intake_data)
-            if ack:
-                acknowledgements.append(ack)
+
+        if newly_filled:
+            for f in journey.fields:
+                if f.name == field.name:
+                    continue
+                if f.name not in newly_filled:
+                    continue
+                if f.is_empty(getattr(intake_data, f.name)):
+                    continue
+                ack = self.render_acknowledgement(f, intake_data)
+                if ack:
+                    acknowledgements.append(ack)
+        else:
+            # Fallback: acknowledge only the most recently collected field.
+            for f in reversed(journey.fields):
+                if f.name == field.name:
+                    continue
+                if f.is_empty(getattr(intake_data, f.name)):
+                    continue
+                ack = self.render_acknowledgement(f, intake_data)
+                if ack:
+                    acknowledgements = [ack]
+                    break
 
         question = self._renderer.render(
             field.question_template,
