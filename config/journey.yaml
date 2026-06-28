@@ -1,0 +1,78 @@
+# Declarative intake journey schema.
+#
+# To change the interview, edit this file. Adding a new field usually requires
+# only one line here plus the matching attribute on IntakeData.
+
+journey:
+  researching_template: >
+    Perfect — I have everything I need, {{first_name or brand_name or 'your brand'}}.
+    I'm now running research across 5 areas: brand audit, competitor scan,
+    trend pulse, customer voice, and hook mining. This will take just a moment...
+
+  fields:
+    - name: first_name
+      type: string
+      required: true
+      ask_when_missing: true
+      question_template: "Hi! What's your first name?"
+      acknowledgement_template: ""
+
+    - name: brand_name
+      type: string
+      required: true
+      ask_when_missing: true
+      question_template: |
+        {% if first_name %}Nice to meet you, {{first_name}}. {% endif %}What brand are we building creative for? Drop the URL too if you have it.
+      acknowledgement_template: "Got it — {{brand_name}}."
+
+    - name: brand_url
+      type: string
+      required: false
+      ask_when_missing: false
+      question_template: "What's the website URL for {{brand_name}}?"
+      acknowledgement_template: ""
+
+    - name: competitors
+      type: list
+      required: true
+      ask_when_missing: true
+      question_template: |
+        {% if first_name %}Thanks, {{first_name}}. {% endif %}Who are the top 2 or 3 competitors you want to stand apart from?
+      acknowledgement_template: ""
+
+    - name: primary_goal
+      type: string
+      required: true
+      ask_when_missing: true
+      question_template: |
+        {% if first_name %}Thanks, {{first_name}}. {% endif %}What's the main thing you're trying to accomplish right now — new customer acquisition, retention, a product launch, or something else?
+      acknowledgement_template: "Goal: {{primary_goal}}."
+
+    - name: target_customer
+      type: string
+      required: true
+      ask_when_missing: true
+      question_template: |
+        {% if first_name %}Thanks, {{first_name}}. {% endif %}Tell us about your ideal customer. Who are you trying to reach and what do they care about?
+      acknowledgement_template: "Target: {{target_customer}}."
+
+    - name: creative_directions
+      type: object
+      required: false
+      ask_when_missing: true
+      question_template: |
+        {% if first_name %}Thanks, {{first_name}}. {% endif %}Any creative directions you want to explore or definitely avoid?
+      acknowledgement_template: ""
+      properties:
+        - name: explore
+          type: list
+        - name: avoid
+          type: list
+
+    - name: additional_context
+      type: string
+      required: false
+      ask_when_missing: true
+      question_template: |
+        {% if first_name %}Thanks, {{first_name}}. {% endif %}Anything else I should know before I start researching?
+      acknowledgement_template: ""

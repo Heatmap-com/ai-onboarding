@@ -1,0 +1,40 @@
+{
+    "_meta": {
+        "description": "Generic fallback fixture for unknown prompts",
+        "match_keywords": [],
+        "latency_ms": 50
+    },
+    "response": {
+        "brand_name": "",
+        "brand_positioning": "",
+        "current_creative_angle": "",
+        "key_messages": [],
+        "visual_identity_notes": "",
+        "recent_campaigns": [],
+        "competitors": [],
+        "category_creative_patterns": "",
+        "whitespace_opportunities": [],
+        "category_trends": [],
+        "cultural_moments": [],
+        "emerging_angles": [],
+        "timing_notes": "",
+        "customer_language": [],
+        "top_desires": [],
+        "top_frustrations": [],
+        "emotional_drivers": [],
+        "objections": [],
+        "proven_hook_types": [],
+        "emotional_angles": [],
+        "rational_angles": [],
+        "format_recommendations": [],
+        "headline_starters": [],
+        "primary_goal": "",
+        "target_customer": "",
+        "desires": [],
+        "creative_angles": [],
+        "sample_headlines": [],
+        "creative_mandatories_explore": [],
+        "creative_mandatories_avoid": [],
+        "competitive_landscape": ""
+    }
+}

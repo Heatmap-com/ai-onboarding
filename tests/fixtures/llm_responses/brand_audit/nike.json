@@ -1,0 +1,14 @@
+{
+    "_meta": {
+        "description": "Brand audit for Nike",
+        "match_keywords": ["nike", "brand audit", "positioning", "brand_positioning", "visual_identity_notes", "recent_campaigns"],
+        "latency_ms": 100
+    },
+    "response": {
+        "brand_positioning": "Nike positions itself as the ultimate performance brand that empowers athletes of all levels. Their 'Just Do It' ethos transcends sport to represent determination and achievement.",
+        "current_creative_angle": "Emotional motivation through athlete stories — from elite professionals to everyday runners. Focus on personal bests over competitive wins.",
+        "key_messages": ["Just Do It", "Find Your Greatness", "Play New"],
+        "visual_identity_notes": "Bold typography, high-contrast black/white with signature orange accent. Dynamic motion blur. Celebrity athlete close-ups.",
+        "recent_campaigns": ["Play New — encouraging trying new sports", "Nike Running Club community push", "Sustainability-focused Move to Zero"]
+    }
+}

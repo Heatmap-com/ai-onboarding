@@ -1,0 +1,32 @@
+{
+    "_meta": {
+        "description": "Competitor scan for Nike vs Adidas and Puma",
+        "match_keywords": ["nike", "adidas", "puma", "competitor scan", "category_creative_patterns", "whitespace_opportunities"],
+        "latency_ms": 100
+    },
+    "response": {
+        "competitors": [
+            {
+                "name": "Adidas",
+                "primary_creative_angle": "Heritage meets modern street culture. Partnerships with celebrities and musicians. Impossible Is Nothing platform.",
+                "key_messages": ["Impossible Is Nothing", "Here To Create", "Change Is a Team Sport"],
+                "apparent_target_audience": "18-35 year olds into streetwear, sneaker culture, and urban lifestyle. Fashion-forward athletes.",
+                "creative_gaps": "Less emotional storytelling than Nike. Product-focused ads can feel transactional. Limited grassroots community engagement."
+            },
+            {
+                "name": "Puma",
+                "primary_creative_angle": "Speed and performance heritage. Bold, colorful aesthetic. Nods to 70s/80s retro sportswear.",
+                "key_messages": ["Forever Faster", "She Moves Us", "Only See Greatness"],
+                "apparent_target_audience": "Younger demographic 16-28, value-conscious athletes, motorsport fans, and retro sneaker enthusiasts.",
+                "creative_gaps": "Brand lacks a unifying emotional narrative. Marketing often fragmented across sports silos. Less premium perception."
+            }
+        ],
+        "category_creative_patterns": "All three brands use athlete endorsements heavily. Sustainability messaging is becoming table stakes. Community and belonging themes are rising post-pandemic. Personalization and customization offers are increasingly common.",
+        "whitespace_opportunities": [
+            "Mental health + performance intersection — no brand owns this space authentically",
+            "Everyday athlete over elite professional — underrepresented in premium positioning",
+            "Local community storytelling at scale — micro-influencers in neighborhood contexts",
+            "Transparency in supply chain as creative storytelling, not just CSR fine print"
+        ]
+    }
+}

@@ -1,0 +1,81 @@
+# Brief Scout — AI Development Context
+
+## Project Overview
+
+Brief Scout is a conversational brief intake + research agent built with Python.
+Users chat through 5-7 natural questions. The system extracts structured data,
+fires 5 parallel LLM research calls (simulated via FakeLLMAdapter), and
+synthesizes everything into a fully populated creative brief in under 2 minutes.
+
+## Architecture
+
+**Ports and Adapters (Hexagonal/Clean Architecture).** Dependencies point inward only.
+
+```
+Interfaces (FastAPI, WebSocket, CLI)          <- framework-specific
+Application (Use Cases, DTOs, Orchestration)  <- business flows
+Domain (Entities, Value Objects, Ports)       <- business rules, contracts
+Infrastructure (LLM Adapters, Config, Telemetry, Storage)  <- adapters implement ports
+```
+
+## Key Decisions
+
+1. **FakeLLMAdapter** — Primary LLM adapter for deterministic, zero-cost testing. Fixture-based responses.
+2. **YAML Config** — All prompts, models, thresholds declarative via YAML + Pydantic.
+3. **Local Telemetry** — Structured JSON logs to local files. OTel-ready via adapter swap.
+4. **In-Memory Storage** — MVP storage. File system adapter available. Port-based for future DB.
+5. **Streaming** — SSE (Server-Sent Events) for real-time chat responses.
+
+## Directory Structure
+
+```
+brief_scout/
+├── src/brief_scout/
+│   ├── domain/          # Models, Ports, Services (business rules)
+│   ├── application/     # Use Cases, DTOs (business flows)
+│   ├── infrastructure/  # Adapters (LLM, Config, Telemetry, Storage)
+│   ├── interfaces/      # FastAPI routes + SSE
+│   └── config/schemas/  # Pydantic config schemas
+├── config/              # YAML configuration files
+├── tests/               # Unit + integration tests
+│   ├── fixtures/llm_responses/  # FakeLLMAdapter fixture files
+│   ├── unit/            # Unit tests
+│   └── integration/     # End-to-end tests
+```
+
+## Coding Standards
+
+- **Python 3.11+** with `from __future__ import annotations`
+- **Pydantic v2** for all data models
+- **pytest + pytest-asyncio** for testing
+- **All imports absolute** — no relative imports in application code
+- **Protocols** for all ports (structural subtyping)
+- **Docstrings** on all public APIs
+- **Type hints** on all function signatures
+- **Frozen=False** on Pydantic models for mutability during session lifecycle
+
+## Testing Rules
+
+- Every test must be immediately runnable with `pytest`
+- Use `pytest.mark.asyncio` for async tests
+- FakeLLMAdapter fixtures go in `tests/fixtures/llm_responses/`
+- Each fixture has `_meta.match_keywords` for pattern matching
+- `conftest.py` provides shared fixtures for adapters
+- Integration tests validate full pipeline end-to-end
+
+## Adding a New Research Call
+
+1. Add result model in `domain/models/research.py`
+2. Add use case method in `ResearchUseCase`
+3. Add prompt template in `config/default.yaml`
+4. Add fixture JSON in `tests/fixtures/llm_responses/{category}/`
+5. Add test in `tests/unit/test_research_use_case.py`
+
+## Acceptance Criteria
+
+- AC-1: Full pipeline produces complete brief from natural language input
+- AC-2: 5 research calls execute in parallel within 500ms
+- AC-3: Failed calls return defaults — pipeline continues
+- AC-4: Identical inputs produce identical outputs (deterministic)
+- AC-5: SSE streaming shows progress through all phases
+- AC-6: Sessions and briefs persist and are retrievable

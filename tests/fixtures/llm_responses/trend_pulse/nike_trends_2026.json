@@ -1,0 +1,32 @@
+{
+    "_meta": {
+        "description": "Trend pulse for Nike in 2026",
+        "match_keywords": ["nike", "trend", "2026", "category", "market"],
+        "latency_ms": 100
+    },
+    "response": {
+        "category_trends": [
+            "Sustainable materials becoming default expectation, not premium feature",
+            "AI-powered personalization in product recommendations and custom design",
+            "Recovery and wellness expanding beyond performance — sleep, nutrition, mental health",
+            "Direct-to-consumer digital channels overtaking wholesale partners",
+            "Membership and subscription models replacing transactional retail",
+            "Hyper-local community activations replacing global mass campaigns"
+        ],
+        "cultural_moments": [
+            "Summer Olympics 2026 — Milan-Cortina, massive global attention moment",
+            "Women's sports viewership continues historic growth trajectory",
+            "Mental health in athletics post-Olympic athlete advocacy movement",
+            "Gen Z entering prime athletic participation years with different values",
+            "AI-generated creative tools democratizing design — authenticity becomes differentiator"
+        ],
+        "emerging_angles": [
+            "Anti-perfectionism — celebrating messy, real athletic moments over polished hero shots",
+            "Micro-communities — city running clubs, park yoga groups, local climbing gyms",
+            "Performance for longevity — not peak achievement but sustainable lifelong fitness",
+            "Athleticism as activism — using sport to drive social change",
+            "Digital-physical hybrid experiences — QR codes on products linking to training content"
+        ],
+        "timing_notes": "Q1-Q2 2026: Build Olympic narrative. Q3: Back-to-school push with Gen Z focus. Q4: Holiday campaign emphasizing gift-of-health positioning. Sustainability messaging should be year-round baseline, not seasonal."
+    }
+}

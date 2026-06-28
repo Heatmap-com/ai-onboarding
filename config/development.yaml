@@ -1,0 +1,8 @@
+# Development overrides — applied on top of default.yaml
+# Set BRIEF_SCOUT_ENV=development to use this configuration.
+
+telemetry:
+  log_level: DEBUG
+  log_dir: "./logs/dev"
+
+storage_adapter: file_system

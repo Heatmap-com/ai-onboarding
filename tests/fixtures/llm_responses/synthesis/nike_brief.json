@@ -1,0 +1,82 @@
+{
+    "_meta": {
+        "description": "Complete creative brief for Nike",
+        "match_keywords": ["synthesize", "following data", "brand positioning", "competitive landscape", "creative brief"],
+        "latency_ms": 150
+    },
+    "response": {
+        "brand_name": "Nike",
+        "brand_positioning": "Nike positions itself as the ultimate performance brand that empowers athletes of all levels. Their 'Just Do It' ethos transcends sport to represent determination and achievement.",
+        "primary_goal": "new customer acquisition",
+        "target_customer": "18-34 year old athletes who care about style and performance",
+        "desires": [
+            "Performance without sacrificing style",
+            "Durability that justifies the price",
+            "Seamless omnichannel shopping experience",
+            "Personalized product recommendations",
+            "Early access to limited drops and exclusives"
+        ],
+        "objections": [
+            "Too expensive compared to Adidas, Puma, or New Balance alternatives",
+            "Unsure if tech features (Air Zoom, React, etc.) are actually worth the premium",
+            "Concerns about labor practices in overseas manufacturing",
+            "Over-saturation — everyone wears Nike, lacks exclusivity",
+            "Sustainability messaging conflicts with constant new releases"
+        ],
+        "competitive_landscape": "Adidas leads on street culture and celebrity partnerships but lacks Nike's emotional storytelling depth. Puma competes on price and speed heritage but has no unifying brand narrative. Key whitespace exists in mental health + performance intersection and everyday athlete community storytelling.",
+        "creative_angles": [
+            {
+                "name": "The Everyday Athlete",
+                "description": "Celebrate real people achieving personal firsts — first 5K, first climb, first yoga class. Shift focus from elite achievement to accessible progress. Partner with micro-influencers in local community contexts.",
+                "rationale": "Research shows 'everyday athlete' is dramatically underrepresented in premium sportswear creative. Customer voice data reveals strong emotional driver around self-improvement and belonging. Competitor analysis shows whitespace in grassroots community storytelling."
+            },
+            {
+                "name": "Performance as Self-Care",
+                "description": "Frame athletic performance as an act of self-respect and mental wellbeing, not punishment or vanity. Connect physical activity to sleep, recovery, and longevity. Partner with sports psychologists and wellness practitioners.",
+                "rationale": "Mental health + performance intersection is wide open — no competitor owns this authentically. Trend data shows recovery and wellness expanding beyond traditional performance. Customer voice reveals strong emotional driver around self-improvement."
+            },
+            {
+                "name": "Transparency in Motion",
+                "description": "Turn sustainability and supply chain transparency into creative storytelling rather than CSR fine print. Show the journey of recycled materials into finished product. Feature the people and communities in the manufacturing process.",
+                "rationale": "Sustainability is becoming table stakes but creative execution is dry and corporate. Whitespace opportunity identified in transparency as storytelling. Customer objection data shows environmental claims feel performative — this angle counters that directly."
+            }
+        ],
+        "proven_hook_types": [
+            "Transformation stories — before/after athletic journey",
+            "Social proof with numbers — 'worn by 10 million runners'",
+            "Identity-based — 'the kind of person who...'",
+            "Contrarian — 'the only workout gear that actually...'",
+            "Authority transfer — elite athlete credibility to everyday consumer"
+        ],
+        "sample_headlines": [
+            "What everyday runners know about consistency that elite athletes forget",
+            "The only running shoe that cushions your joints without weighing you down",
+            "Why the best climbers in the world choose Nike — and it has nothing to do with the logo",
+            "If you're still treating recovery as an afterthought, you're missing out",
+            "This jacket changed how I think about sustainable fashion forever",
+            "The uncomfortable truth about most 'performance' activewear"
+        ],
+        "creative_mandatories_explore": [
+            "Diverse body types and ability levels in all imagery",
+            "Local community settings over glossy stadiums",
+            "Mental health and wellness themes alongside physical performance",
+            "Transparency moments — manufacturing, materials, people behind the product",
+            "User-generated content style — authentic, slightly imperfect, real"
+        ],
+        "creative_mandatories_avoid": [
+            "Elite-only athlete imagery — no Olympic medalists without everyday athletes alongside",
+            "Over-polished, obviously-shot-in-studio creative",
+            "Generic 'empowerment' language without specific proof points",
+            "Competitive framing — never position against competitors by name",
+            "Seasonal fast-fashion messaging — sustainability must be credible"
+        ],
+        "category_trends": [
+            "Sustainable materials becoming default expectation, not premium feature",
+            "AI-powered personalization in product recommendations and custom design",
+            "Recovery and wellness expanding beyond performance — sleep, nutrition, mental health",
+            "Direct-to-consumer digital channels overtaking wholesale partners",
+            "Membership and subscription models replacing transactional retail",
+            "Hyper-local community activations replacing global mass campaigns"
+        ]
+    }
+}

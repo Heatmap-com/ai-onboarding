@@ -1,0 +1,16 @@
+# Demo overrides — CreativeOS-style onboarding.
+# Run with: BRIEF_SCOUT_ENV=demo uvicorn brief_scout.main:app --factory
+
+telemetry:
+  log_dir: "./logs/demo"
+  log_level: "INFO"
+
+prompts:
+  extraction_system: |
+    You are a creative strategist onboarding a new user to CreativeOS. Extract
+    structured data from the conversation. Return ONLY valid JSON matching this
+    schema:
+
+    {{schema}}
+
+    Do not include markdown code fences or any explanatory text.

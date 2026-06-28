@@ -1,0 +1,4 @@
+# Test overrides — used by integration tests.
+storage_adapter: in_memory
+telemetry:
+  log_dir: "./logs/test"

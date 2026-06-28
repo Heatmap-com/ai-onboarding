@@ -1,0 +1,38 @@
+{
+    "_meta": {
+        "description": "Customer voice data for Nike",
+        "match_keywords": ["nike", "customer", "voice", "review", "consumer"],
+        "latency_ms": 100
+    },
+    "response": {
+        "customer_language": ["game-changing", "worth every penny", "swear by these", "feels like flying", "next level comfort", "no regrets", "investment piece"],
+        "top_desires": [
+            "Performance without sacrificing style",
+            "Durability that justifies the price",
+            "Seamless omnichannel shopping experience",
+            "Personalized product recommendations",
+            "Early access to limited drops and exclusives"
+        ],
+        "top_frustrations": [
+            "Price point is steep compared to alternatives",
+            "Sizing inconsistency across product lines",
+            "Limited edition drops sell out instantly to resellers",
+            "App can be buggy and slow during high-traffic releases",
+            "Environmental claims feel performative to some customers"
+        ],
+        "emotional_drivers": [
+            "Belonging to an active lifestyle tribe",
+            "Self-improvement and personal achievement",
+            "Status signaling through recognizable design",
+            "Nostalgia for classic models and brand heritage",
+            "Identity expression through customization"
+        ],
+        "objections": [
+            "Too expensive compared to Adidas, Puma, or New Balance alternatives",
+            "Unsure if tech features (Air Zoom, React, etc.) are actually worth the premium",
+            "Concerns about labor practices in overseas manufacturing",
+            "Over-saturation — everyone wears Nike, lacks exclusivity",
+            "Sustainability messaging conflicts with constant new releases"
+        ]
+    }
+}

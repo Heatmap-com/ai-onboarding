@@ -1,0 +1,69 @@
+# Demo journey data — cumulative extraction responses for each user turn.
+# Used by the FakeLLM adapter in demo mode so adding a turn only requires
+# appending a new entry here.
+
+turns:
+  - first_name: Alex
+    brand_name: Nike
+    brand_url: https://nike.com
+    competitors: []
+    primary_goal: ""
+    target_customer: ""
+    creative_directions:
+      explore: []
+      avoid: []
+    additional_context: ""
+
+  - first_name: Alex
+    brand_name: Nike
+    brand_url: https://nike.com
+    competitors:
+      - Adidas
+      - Puma
+    primary_goal: ""
+    target_customer: ""
+    creative_directions:
+      explore: []
+      avoid: []
+    additional_context: ""
+
+  - first_name: Alex
+    brand_name: Nike
+    brand_url: https://nike.com
+    competitors:
+      - Adidas
+      - Puma
+    primary_goal: new customer acquisition
+    target_customer: ""
+    creative_directions:
+      explore: []
+      avoid: []
+    additional_context: ""
+
+  - first_name: Alex
+    brand_name: Nike
+    brand_url: https://nike.com
+    competitors:
+      - Adidas
+      - Puma
+    primary_goal: new customer acquisition
+    target_customer: 18-34 year old athletes who care about style and performance
+    creative_directions:
+      explore: []
+      avoid: []
+    additional_context: ""
+
+  - first_name: Alex
+    brand_name: Nike
+    brand_url: https://nike.com
+    competitors:
+      - Adidas
+      - Puma
+    primary_goal: new customer acquisition
+    target_customer: 18-34 year old athletes who care about style and performance
+    creative_directions:
+      explore:
+        - authentic athlete stories
+      avoid:
+        - generic celebrity endorsements
+    additional_context: Focus on sustainability messaging

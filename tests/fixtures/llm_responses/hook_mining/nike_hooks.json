@@ -1,0 +1,46 @@
+{
+    "_meta": {
+        "description": "Hook and angle mining for Nike",
+        "match_keywords": ["nike", "hook", "angle", "creative", "headline"],
+        "latency_ms": 100
+    },
+    "response": {
+        "proven_hook_types": [
+            "Transformation stories — before/after athletic journey",
+            "Social proof with numbers — 'worn by 10 million runners'",
+            "Fear of missing out — limited drops, exclusivity",
+            "Identity-based — 'the kind of person who...'",
+            "Contrarian — 'the only workout gear that actually...'",
+            "Authority transfer — elite athlete credibility to everyday consumer"
+        ],
+        "emotional_angles": [
+            "The first step is the hardest — celebrate beginning, not just winning",
+            "Your only competition is yesterday's you",
+            "Athleticism as self-care, not punishment",
+            "Community and belonging through shared sweat",
+            "Redemption stories — comeback stronger"
+        ],
+        "rational_angles": [
+            "Technology breakdown — what Air Zoom actually does for your joints",
+            "Cost-per-wear calculation — durability justifies investment",
+            "Comparison charts vs competitors on key metrics",
+            "Expert endorsements from sports scientists and physiotherapists",
+            "Sustainability data — recycled materials, carbon footprint reduction"
+        ],
+        "format_recommendations": [
+            "Short-form vertical video (9:16) — 15-30 seconds with hook in first 3s",
+            "Cinematic documentary-style — 2-3 minute athlete origin stories",
+            "UGC-style authentic footage — shot on phone, minimal polish",
+            "Interactive try-on AR experiences",
+            "Audio-first — podcast sponsorships with athlete hosts"
+        ],
+        "headline_starters": [
+            "What [athlete type] know about [outcome] that you don't",
+            "The [product] that [specific result] without [common pain point]",
+            "Why the best [activity] in the world choose [brand]",
+            "If you're still [old behavior], you're missing out",
+            "This [product category] changed how I [activity] forever",
+            "The uncomfortable truth about [industry norm]"
+        ]
+    }
+}
