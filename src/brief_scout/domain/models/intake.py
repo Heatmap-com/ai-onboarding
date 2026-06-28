@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,7 +53,7 @@ class ChatMessage(BaseModel):
 
     model_config = ConfigDict(frozen=False)
 
-    role: str = "user"
+    role: Literal["user", "assistant", "system"] = "user"
     content: str = ""
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
@@ -66,5 +67,5 @@ class ChatSession(BaseModel):
     messages: list[ChatMessage] = Field(default_factory=list)
     intake_data: IntakeData = Field(default_factory=IntakeData)
     asked_optional_questions: list[str] = Field(default_factory=list)
-    status: Status = Field(default=Status.INTAKING)
+    status: Status = Status.INTAKING
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

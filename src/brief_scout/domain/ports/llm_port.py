@@ -1,8 +1,11 @@
-"""LLM Port — primary contract for all LLM interactions.
+"""LLM Port — composite contract for all LLM interactions.
 
-Every LLM adapter (FakeLLMAdapter, KimiAdapter, ClaudeAdapter, etc.)
-implements this Protocol. Domain and application layers depend only
-on this interface, never on concrete adapter implementations.
+This module now composes the narrow LLM ports:
+  - CompletionPort
+  - StructuredCompletionPort
+
+Every full LLM adapter implements this composite. Application code should
+depend on CompletionPort or StructuredCompletionPort as appropriate.
 """
 
 from __future__ import annotations
@@ -51,10 +54,12 @@ class Prompt(BaseModel):
 
 
 class LLMPort(Protocol):
-    """Primary port for all LLM interactions.
+    """Composite port for all LLM interactions.
 
     Every LLM adapter implements this Protocol. Use dependency injection
     to provide the appropriate adapter at application startup.
+
+    This composite extends CompletionPort and StructuredCompletionPort.
     """
 
     async def complete(
@@ -62,15 +67,7 @@ class LLMPort(Protocol):
         prompt: Prompt,
         config: dict[str, Any] | None = None,
     ) -> LLMResponse:
-        """Execute a single LLM completion.
-
-        Args:
-            prompt: The standardized prompt containing system and user messages.
-            config: Optional provider-specific configuration overrides.
-
-        Returns:
-            An LLMResponse containing the generated content and metadata.
-        """
+        """Execute a single LLM completion."""
         ...
 
     async def complete_structured(
@@ -79,26 +76,10 @@ class LLMPort(Protocol):
         output_schema: type[T],
         config: dict[str, Any] | None = None,
     ) -> T:
-        """Execute LLM completion with structured output.
-
-        The LLM is expected to return valid JSON that can be parsed
-        into the provided Pydantic model.
-
-        Args:
-            prompt: The standardized prompt.
-            output_schema: A Pydantic model class to parse the response into.
-            config: Optional provider-specific configuration overrides.
-
-        Returns:
-            An instance of the output_schema Pydantic model.
-        """
+        """Execute LLM completion with structured output."""
         ...
 
     @property
     def provider_name(self) -> str:
-        """Return the provider identifier.
-
-        Returns:
-            A string like 'fake', 'kimi', 'claude', 'openai'.
-        """
+        """Return the provider identifier."""
         ...

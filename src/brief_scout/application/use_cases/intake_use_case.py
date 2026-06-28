@@ -237,7 +237,7 @@ class IntakeUseCase:
         # Generic provider extras are passed through as the structured completion
         # config. This removes FakeLLM-specific ``demo_turn`` logic from the use
         # case while still allowing adapters to consume adapter-specific settings.
-        extraction_config = self._generic_extraction_config()
+        extraction_config = self._generic_extraction_config(messages)
 
         try:
             result = await self._llm.complete_structured(
@@ -262,18 +262,26 @@ class IntakeUseCase:
                 provider=self._llm.provider_name,
             ) from exc
 
-    def _generic_extraction_config(self) -> dict[str, Any] | None:
+    def _generic_extraction_config(
+        self,
+        messages: list[ChatMessage],
+    ) -> dict[str, Any] | None:
         """Return generic provider extras to pass to the LLM port.
 
         The application layer no longer builds FakeLLM-specific ``demo_turn``
         config; it delegates to whatever extra configuration the active
-        provider exposes.
+        provider exposes. When a ``demo_journey_path`` extra is present, the
+        current user turn number is appended so demo adapters can select the
+        cumulative fixture without the use case knowing the adapter type.
         """
         try:
             provider_config = self._config.app_config.get_provider_config(
                 self._llm.provider_name,
             )
-            extras = provider_config.extras
+            extras = dict(provider_config.extras)
+            if extras.get("demo_journey_path"):
+                user_turns = sum(1 for msg in messages if msg.role == "user")
+                extras["demo_turn"] = user_turns
             return extras if extras else None
         except KeyError:
             return None

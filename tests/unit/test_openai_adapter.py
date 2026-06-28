@@ -412,8 +412,8 @@ class TestComplete:
 
         result = await adapter.complete(prompt)
         assert result.tokens_used == 0
-        assert result.metadata["prompt_tokens"] == 0
-        assert result.metadata["completion_tokens"] == 0
+        assert result.metadata["provider_metadata"]["prompt_tokens"] == 0
+        assert result.metadata["provider_metadata"]["completion_tokens"] == 0
 
     @pytest.mark.asyncio
     async def test_should_include_metadata(
@@ -426,10 +426,11 @@ class TestComplete:
         adapter._client = mock_openai_client
         result = await adapter.complete(prompt)
 
-        assert "prompt_tokens" in result.metadata
-        assert "completion_tokens" in result.metadata
-        assert result.metadata["prompt_tokens"] == 30
-        assert result.metadata["completion_tokens"] == 20
+        provider_metadata = result.metadata["provider_metadata"]
+        assert "prompt_tokens" in provider_metadata
+        assert "completion_tokens" in provider_metadata
+        assert provider_metadata["prompt_tokens"] == 30
+        assert provider_metadata["completion_tokens"] == 20
 
     @pytest.mark.asyncio
     async def test_should_measure_latency(

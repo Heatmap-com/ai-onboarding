@@ -21,6 +21,7 @@ from brief_scout.domain.models.intake import (
     ChatSession,
     CreativeDirections,
     IntakeData,
+    Status,
 )
 from brief_scout.domain.models.research import (
     BrandAuditResult,
@@ -38,6 +39,7 @@ __all__ = [
     "ChatSession",
     "CreativeDirections",
     "IntakeData",
+    "Status",
     # Research models
     "BrandAuditResult",
     "CompetitorData",
