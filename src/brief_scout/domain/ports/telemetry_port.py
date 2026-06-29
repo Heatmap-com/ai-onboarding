@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -51,6 +51,7 @@ class TelemetryEvent(BaseModel):
     level: LogLevel = LogLevel.INFO
 
 
+@runtime_checkable
 class TelemetryPort(Protocol):
     """Composite port for logging, metrics, and tracing.
 

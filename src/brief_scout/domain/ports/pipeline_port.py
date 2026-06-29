@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from brief_scout.application.services import PipelineEvent
     from brief_scout.domain.models.intake import ChatSession
+    from brief_scout.domain.ports.pipeline_event import PipelineEvent
 
 
 class PipelinePort(Protocol):

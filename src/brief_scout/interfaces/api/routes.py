@@ -31,12 +31,12 @@ from brief_scout.application.dto import (
     MessageRequest,
     SessionResponse,
 )
-from brief_scout.application.services import PipelineEvent
 from brief_scout.application.services.brief_markdown_renderer import (
     BriefMarkdownRenderer,
 )
 from brief_scout.domain.models import ChatSession
 from brief_scout.domain.ports.config_port import ConfigurationPort  # noqa: TC001
+from brief_scout.domain.ports.pipeline_event import PipelineEvent
 from brief_scout.domain.ports.pipeline_port import PipelinePort  # noqa: TC001
 from brief_scout.domain.ports.storage_port import BriefStoragePort  # noqa: TC001
 from brief_scout.interfaces.api.dependencies import (

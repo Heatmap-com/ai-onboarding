@@ -33,6 +33,7 @@ from brief_scout.infrastructure.storage.in_memory_adapter import (
 from brief_scout.infrastructure.telemetry.local_file_adapter import (
     LocalFileTelemetryAdapter,
 )
+from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 
 if TYPE_CHECKING:
     from brief_scout.domain.models.journey import IntakeJourney
@@ -89,13 +90,15 @@ def use_case(
     """Provide an IntakeUseCase with a mock LLM."""
     llm = AsyncMock()
     llm.provider_name = "mock"
+    template_renderer = Jinja2TemplateRenderer()
     extractor = IntakeDataExtractor(
         llm=llm,
         journey=journey,
+        renderer=template_renderer,
         provider_config_source=config,
         logger=telemetry,
     )
-    acknowledgement_service = JourneyAcknowledgementService()
+    acknowledgement_service = JourneyAcknowledgementService(renderer=template_renderer)
     differ = IntakeDataDiffer(journey=journey)
 
     return IntakeUseCase(

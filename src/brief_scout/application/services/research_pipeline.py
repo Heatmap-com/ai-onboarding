@@ -4,36 +4,19 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
-
-from pydantic import BaseModel, Field
+from typing import TYPE_CHECKING, Any
 
 from brief_scout.domain.models.research import ResearchBundle
+from brief_scout.domain.ports.pipeline_event import PipelineEvent
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
+    from pydantic import BaseModel
+
     from brief_scout.domain.models.intake import IntakeData
+    from brief_scout.domain.ports.research_step_port import ResearchStep
     from brief_scout.domain.ports.telemetry_port import TelemetryPort
-
-
-class PipelineEvent(BaseModel):
-    """Domain event emitted by pipeline stages."""
-
-    stage: str = ""
-    status: str = ""
-    payload: dict[str, Any] = Field(default_factory=dict)
-
-
-@runtime_checkable
-class ResearchStep(Protocol):
-    """A single pluggable research step."""
-
-    name: str
-
-    async def execute(self, intake_data: IntakeData) -> BaseModel:
-        """Execute the step and return a typed result."""
-        ...
 
 
 class ResearchPipeline:
