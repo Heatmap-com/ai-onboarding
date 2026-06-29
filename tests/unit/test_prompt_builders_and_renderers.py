@@ -9,11 +9,11 @@ from brief_scout.application.services.intake_prompt_builder import IntakePromptB
 from brief_scout.application.services.journey_renderer import JourneyRenderer
 from brief_scout.application.services.research_prompt_builder import ResearchPromptBuilder
 from brief_scout.application.services.synthesis_prompt_builder import SynthesisPromptBuilder
-from brief_scout.application.services.template_renderer import Jinja2TemplateRenderer
 from brief_scout.domain.models import Brief, CreativeAngle
 from brief_scout.domain.models.config import PromptTemplateConfig
 from brief_scout.domain.models.intake import ChatMessage, IntakeData
 from brief_scout.domain.models.journey import IntakeJourney, JourneyField, ObjectProperty
+from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 
 
 class TestJinja2TemplateRenderer:
@@ -33,6 +33,11 @@ class TestJinja2TemplateRenderer:
 
 class TestJourneyRenderer:
     """Tests for the journey template renderer."""
+
+    @pytest.fixture
+    def renderer(self) -> JourneyRenderer:
+        """Provide a JourneyRenderer using the real Jinja2 adapter."""
+        return JourneyRenderer(renderer=Jinja2TemplateRenderer())
 
     @pytest.fixture
     def journey(self) -> IntakeJourney:
@@ -66,9 +71,8 @@ class TestJourneyRenderer:
             ],
         )
 
-    def test_render_question(self, journey: IntakeJourney) -> None:
+    def test_render_question(self, journey: IntakeJourney, renderer: JourneyRenderer) -> None:
         """Questions should include context-aware acknowledgements."""
-        renderer = JourneyRenderer()
         field = journey.get_field("competitors")
         assert field is not None
         intake = IntakeData(brand_name="Nike")
@@ -76,23 +80,26 @@ class TestJourneyRenderer:
         assert "Got it: Nike." in question
         assert "Who competes with Nike?" in question
 
-    def test_render_question_without_ack(self, journey: IntakeJourney) -> None:
+    def test_render_question_without_ack(
+        self, journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """When no prior fields are filled, acknowledgements are omitted."""
-        renderer = JourneyRenderer()
         field = journey.get_field("brand_name")
         assert field is not None
         question = renderer.render_question(journey, field, IntakeData())
         assert question == "What brand?"
 
-    def test_render_researching_message(self, journey: IntakeJourney) -> None:
+    def test_render_researching_message(
+        self, journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """The researching transition message should render."""
-        renderer = JourneyRenderer()
         message = renderer.render_researching_message(journey, IntakeData(brand_name="Nike"))
         assert "running research" in message.lower()
 
-    def test_render_extraction_schema(self, journey: IntakeJourney) -> None:
+    def test_render_extraction_schema(
+        self, journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """The extraction schema should list all fields."""
-        renderer = JourneyRenderer()
         schema = renderer.render_extraction_schema(journey)
         assert '"brand_name": ""' in schema
         assert '"competitors": []' in schema
@@ -104,7 +111,7 @@ class TestIntakePromptBuilder:
 
     def test_build_extraction_prompt(self) -> None:
         """The prompt should include the rendered schema and transcript."""
-        builder = IntakePromptBuilder()
+        builder = IntakePromptBuilder(renderer=Jinja2TemplateRenderer())
         journey = IntakeJourney(
             fields=[
                 JourneyField(name="brand_name", type="string", required=True),

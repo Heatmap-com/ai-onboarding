@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from brief_scout.domain.ports.session_storage_port import SessionReader, SessionWriter
 
@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from brief_scout.domain.models.brief import Brief
 
 
+@runtime_checkable
 class BriefReader(Protocol):
     """Narrow port for loading briefs."""
 
@@ -18,6 +19,7 @@ class BriefReader(Protocol):
         ...
 
 
+@runtime_checkable
 class BriefWriter(Protocol):
     """Narrow port for saving briefs."""
 
@@ -26,6 +28,7 @@ class BriefWriter(Protocol):
         ...
 
 
+@runtime_checkable
 class BriefStoragePort(BriefReader, BriefWriter, SessionReader, SessionWriter, Protocol):
     """Combined narrow port for brief and session persistence."""
 

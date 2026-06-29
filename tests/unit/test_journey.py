@@ -10,6 +10,7 @@ from brief_scout.application.services.journey_renderer import JourneyRenderer
 from brief_scout.domain.models.intake import IntakeData
 from brief_scout.domain.models.journey import IntakeJourney, JourneyField
 from brief_scout.infrastructure.config.journey_loader import JourneyLoader
+from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 
 
 class TestJourneyField:
@@ -73,6 +74,11 @@ class TestIntakeJourney:
             ],
         )
 
+    @pytest.fixture
+    def renderer(self) -> JourneyRenderer:
+        """Provide a JourneyRenderer using the real Jinja2 adapter."""
+        return JourneyRenderer(renderer=Jinja2TemplateRenderer())
+
     def test_next_field_returns_first_missing_required(self, journey: IntakeJourney) -> None:
         """Empty intake should ask for the first required field."""
         data = IntakeData()
@@ -96,7 +102,9 @@ class TestIntakeJourney:
         )
         assert journey.is_complete(data) is True
 
-    def test_render_question_includes_acknowledgement(self, journey: IntakeJourney) -> None:
+    def test_render_question_includes_acknowledgement(
+        self, journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """Question for competitors should acknowledge already-known brand."""
         data = IntakeData(
             first_name="Alex",
@@ -104,17 +112,17 @@ class TestIntakeJourney:
         )
         competitors = journey.get_field("competitors")
         assert competitors is not None
-        renderer = JourneyRenderer()
         question = renderer.render_question(journey, competitors, data)
         assert "Got it — Nike." in question
         assert "Who are the competitors?" in question
 
-    def test_render_question_uses_template_context(self, journey: IntakeJourney) -> None:
+    def test_render_question_uses_template_context(
+        self, journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """Question template should interpolate collected data."""
         data = IntakeData(first_name="Alex")
         brand_field = journey.get_field("brand_name")
         assert brand_field is not None
-        renderer = JourneyRenderer()
         question = renderer.render_question(journey, brand_field, data)
         assert "Alex" in question
 
@@ -160,6 +168,11 @@ class TestLoadedJourney:
         """Load the default journey from config."""
         return JourneyLoader(config_dir="config").load()
 
+    @pytest.fixture
+    def renderer(self) -> JourneyRenderer:
+        """Provide a JourneyRenderer using the real Jinja2 adapter."""
+        return JourneyRenderer(renderer=Jinja2TemplateRenderer())
+
     def test_has_required_fields(self, loaded_journey: IntakeJourney) -> None:
         """The default journey should define the expected required fields."""
         required_names = {f.name for f in loaded_journey.required_fields}
@@ -171,7 +184,9 @@ class TestLoadedJourney:
             "target_customer",
         }
 
-    def test_question_templates_render(self, loaded_journey: IntakeJourney) -> None:
+    def test_question_templates_render(
+        self, loaded_journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """Every question template should render without error for sample data."""
         sample = IntakeData(
             first_name="Alex",
@@ -182,17 +197,17 @@ class TestLoadedJourney:
             target_customer="athletes",
             additional_context="Focus on sustainability",
         )
-        renderer = JourneyRenderer()
         for field in loaded_journey.fields:
             if field.ask_when_missing:
                 rendered = renderer.render_question(loaded_journey, field, sample)
                 assert isinstance(rendered, str)
                 assert rendered.strip()
 
-    def test_researching_template_renders(self, loaded_journey: IntakeJourney) -> None:
+    def test_researching_template_renders(
+        self, loaded_journey: IntakeJourney, renderer: JourneyRenderer
+    ) -> None:
         """The researching transition template should render without error."""
         sample = IntakeData(first_name="Alex", brand_name="Nike")
-        renderer = JourneyRenderer()
         message = renderer.render_researching_message(loaded_journey, sample)
         assert "Alex" in message
         assert "research" in message.lower()

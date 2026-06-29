@@ -17,17 +17,13 @@ if TYPE_CHECKING:
 class JourneyRenderer:
     """Renders questions, acknowledgements, and extraction schema."""
 
-    def __init__(self, renderer: TemplateRenderer | None = None) -> None:
+    def __init__(self, renderer: TemplateRenderer) -> None:
         """Initialize with a template renderer.
 
         Args:
-            renderer: Template renderer. If omitted, a Jinja2 renderer is used.
+            renderer: Template renderer for journey templates.
         """
-        from brief_scout.application.services.template_renderer import (
-            Jinja2TemplateRenderer,
-        )
-
-        self._renderer = renderer or Jinja2TemplateRenderer()
+        self._renderer = renderer
 
     def render_question(
         self,
