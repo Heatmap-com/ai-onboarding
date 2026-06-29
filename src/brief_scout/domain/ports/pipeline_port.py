@@ -17,7 +17,7 @@ class PipelinePort(Protocol):
     def run(
         self,
         session: ChatSession,
-        user_message: str,
+        user_message: str | None = None,
     ) -> AsyncIterator[PipelineEvent]:
         """Execute the pipeline and yield progress events."""
         ...

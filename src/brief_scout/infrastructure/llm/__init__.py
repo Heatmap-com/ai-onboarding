@@ -8,6 +8,7 @@ Real LLM adapters (for OpenAI, Anthropic, Kimi, etc.) can be added here
 in the future, all implementing the same LLMPort interface.
 """
 
+from brief_scout.infrastructure.llm.cached_llm import CachedLLM
 from brief_scout.infrastructure.llm.claude_adapter import ClaudeAdapter
 from brief_scout.infrastructure.llm.fake_llm_adapter import FakeLLMAdapter
 from brief_scout.infrastructure.llm.json_instruction_injector import (
@@ -20,6 +21,7 @@ from brief_scout.infrastructure.llm.response_parser import ResponseParser
 from brief_scout.infrastructure.llm.schema_describer import SchemaDescriber
 
 __all__ = [
+    "CachedLLM",
     "ClaudeAdapter",
     "FakeLLMAdapter",
     "JsonInstructionInjector",

@@ -30,9 +30,13 @@ class ResearchUseCase:
         self,
         registry: ResearchStepRegistry,
         telemetry: TelemetryPort,
+        max_concurrent_calls: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> None:
         self._registry = registry
         self._telemetry = telemetry
+        self._max_concurrent_calls = max_concurrent_calls
+        self._timeout_seconds = timeout_seconds
 
     def build_pipeline(self) -> ResearchPipeline:
         """Build the default research pipeline from the configured registry."""
@@ -41,6 +45,8 @@ class ResearchUseCase:
         return ResearchPipeline(
             steps=list(self._registry.steps),
             telemetry=self._telemetry,
+            max_concurrent_calls=self._max_concurrent_calls,
+            timeout_seconds=self._timeout_seconds,
         )
 
     # Backwards-compatible alias for tests and callers still using the old name.

@@ -46,7 +46,7 @@ class _TestComplexSchema(BaseModel):
 @pytest.fixture
 def adapter() -> KimiAdapter:
     """Provide a KimiAdapter with a dummy API key (no network calls)."""
-    return KimiAdapter(api_key="test-key-sk-123456")
+    return KimiAdapter(api_key="test-key-sk-123456", max_retries=0)
 
 
 @pytest.fixture

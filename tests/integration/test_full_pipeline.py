@@ -15,6 +15,7 @@ import time
 
 import pytest
 
+from brief_scout.application.services.brief_markdown_renderer import BriefMarkdownRenderer
 from brief_scout.domain.models.brief import Brief, CreativeAngle
 from brief_scout.domain.models.intake import (
     ChatMessage,
@@ -333,7 +334,7 @@ class TestFullPipeline:
         assert len(brief.creative_angles) >= 0
 
         # 8. Assert markdown rendering
-        md = brief.to_markdown()
+        md = BriefMarkdownRenderer().render(brief)
         assert "# Creative Brief:" in md
         assert brief.brand_name in md
         assert "Brief Scout" in md
@@ -387,7 +388,7 @@ class TestFullPipeline:
         for _ in range(10):
             bundle = await pipeline.run_research(intake_data)
             brief = await pipeline.run_synthesis(intake_data, bundle)
-            briefs.append(brief.to_markdown())
+            briefs.append(BriefMarkdownRenderer().render(brief))
 
         assert all(b == briefs[0] for b in briefs), "All 10 runs should produce identical briefs"
 

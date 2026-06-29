@@ -10,6 +10,7 @@ SpanContext, CorrelationContext) as well as the composite TelemetryPort.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -34,6 +35,11 @@ class LocalFileTelemetryAdapter:
 
     One log file per day. Correlation IDs are tracked via contextvars
     for seamless propagation across async task boundaries.
+
+    Log writes are performed asynchronously so that sync callers (e.g.
+    ``LoggerPort`` implementations) do not block the event loop. When an
+    event loop is available, writes are scheduled as background tasks and
+    can be awaited via :meth:`flush`.
 
     Attributes:
         log_dir: Directory where log files are written.
@@ -66,6 +72,30 @@ class LocalFileTelemetryAdapter:
         self._writer = writer or JsonlWriter(log_dir)
         self._min_level = LogLevel(log_level.upper())
         self._span_store = span_store or SpanStore()
+        self._pending: set[asyncio.Task[Any]] = set()
+
+    def _write(self, entry: dict[str, Any]) -> None:
+        """Schedule an async write, falling back to sync when no loop exists."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # Synchronous fallback for contexts without an event loop.
+            import asyncio as _asyncio
+
+            _asyncio.run(self._writer.write(entry))
+            return
+
+        task = loop.create_task(self._writer.write(entry))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+
+    async def flush(self) -> None:
+        """Await any pending background log writes."""
+        if not self._pending:
+            return
+        pending = list(self._pending)
+        self._pending.clear()
+        await asyncio.gather(*pending, return_exceptions=True)
 
     def log(
         self,
@@ -92,7 +122,7 @@ class LocalFileTelemetryAdapter:
             "data": kwargs,
         }
 
-        self._writer.write(entry)
+        self._write(entry)
 
     def record_event(self, event: TelemetryEvent) -> None:
         """Record a structured telemetry event."""
@@ -110,7 +140,7 @@ class LocalFileTelemetryAdapter:
             },
         }
 
-        self._writer.write(entry)
+        self._write(entry)
 
     def start_span(
         self,

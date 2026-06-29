@@ -45,7 +45,7 @@ class _TestSimpleOutput(BaseModel):
 @pytest.fixture
 def adapter() -> OpenAIAdapter:
     """Provide an OpenAIAdapter with a dummy API key."""
-    return OpenAIAdapter(api_key="test-key-sk-1234")
+    return OpenAIAdapter(api_key="test-key-sk-1234", max_retries=0)
 
 
 @pytest.fixture

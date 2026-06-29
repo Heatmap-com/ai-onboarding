@@ -45,6 +45,36 @@ def _event_payload(line: str) -> dict[str, object] | None:
     return None
 
 
+def _append_pipeline_event(lines: list[str], event: dict[str, object]) -> None:
+    """Render a single pipeline SSE event into the transcript."""
+    event_type = event.get("type", "unknown")
+    if event_type == "intake":
+        lines.append(
+            f"- **Intake:** {event.get('message', '')} "
+            f"(complete={event.get('is_complete', False)})\n",
+        )
+    elif event_type == "research":
+        status = event.get("status", "")
+        steps = event.get("steps", [])
+        if status == "started" and steps:
+            lines.append(f"- **Research started:** {', '.join(steps)}\n")
+        elif status == "complete":
+            lines.append("- **Research complete** ✅\n")
+        else:
+            lines.append(f"- **Research:** {status}\n")
+    elif event_type == "research_step":
+        lines.append(f"  - _{event.get('name')}: {event.get('status')}_\n")
+    elif event_type == "synthesis":
+        lines.append(f"- **Synthesis:** {event.get('status')}\n")
+    elif event_type == "brief":
+        lines.append("- **Brief generated** ✅\n")
+        lines.append(f"  - Brand: {event.get('brief', {}).get('brand_name', '')}\n")
+    elif event_type == "complete":
+        lines.append("- **Pipeline complete** ✅\n")
+    elif event_type == "error":
+        lines.append(f"- **Error:** {event.get('message')}\n")
+
+
 async def run_demo() -> None:
     """Run the full onboarding workflow and write the transcript."""
     app = create_app("config", "demo")
@@ -53,10 +83,13 @@ async def run_demo() -> None:
     lines.append("# CreativeOS Onboarding Demo\n")
     lines.append(
         "This transcript shows a complete onboarding conversation through the "
-        "Brief Scout API, configured for a CreativeOS-style workflow.\n"
+        "Brief Scout API, configured for a CreativeOS-style workflow.\n",
     )
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         # 1. Create a session
         session_resp = await client.post("/api/v1/chat/sessions")
         session_data = session_resp.json()
@@ -66,74 +99,60 @@ async def run_demo() -> None:
         lines.append("---\n")
 
         # 2. Conversational intake loop
-        last_user_message = ""
-        for user_msg in USER_MESSAGES:
-            last_user_message = user_msg
+        # The first messages return JSON while intake is incomplete. The final
+        # message completes intake and streams the full pipeline via SSE.
+        for i, user_msg in enumerate(USER_MESSAGES):
             lines.append(f"**User:** {user_msg}\n")
 
-            response = await client.post(
-                f"/api/v1/chat/{session_id}/message",
-                json={"message": user_msg},
-            )
-            response.raise_for_status()
-            data = response.json()
+            if i < len(USER_MESSAGES) - 1:
+                response = await client.post(
+                    f"/api/v1/chat/{session_id}/message",
+                    json={"message": user_msg},
+                )
+                response.raise_for_status()
+                data = response.json()
 
-            assistant_msg = data["message"]
-            status = data["status"]
-            lines.append(f"**CreativeOS:** {assistant_msg}\n")
-            lines.append(f"_Status: {status}_\n")
+                assistant_msg = data["message"]
+                status = data["status"]
+                lines.append(f"**CreativeOS:** {assistant_msg}\n")
+                lines.append(f"_Status: {status}_\n")
+            else:
+                # Final message triggers the SSE pipeline stream.
+                async with client.stream(
+                    "POST",
+                    f"/api/v1/chat/{session_id}/message",
+                    json={"message": user_msg},
+                    timeout=60,
+                ) as stream:
+                    lines.append("---\n")
+                    lines.append("## Pipeline Stream\n")
+                    async for line in stream.aiter_lines():
+                        event = _event_payload(line)
+                        if event is None:
+                            continue
+                        _append_pipeline_event(lines, event)
 
-            if status == "researching":
-                break
+        # 3. Retrieve the final brief
+        lines.append("\n---\n")
+        lines.append("## Final Creative Brief\n")
 
-        # 3. Stream the full pipeline (research + synthesis)
-        lines.append("---\n")
-        lines.append("## Pipeline Stream\n")
-
-        async with client.stream(
-            "GET",
-            f"/api/v1/chat/{session_id}/stream",
-            params={"message": last_user_message},
-            timeout=60,
-        ) as stream:
-            async for line in stream.aiter_lines():
-                event = _event_payload(line)
-                if event is None:
-                    continue
-                event_type = event.get("type", "unknown")
-                if event_type == "intake":
-                    lines.append(
-                        f"- **Intake:** {event.get('message', '')} "
-                        f"(complete={event.get('is_complete', False)})\n"
-                    )
-                elif event_type == "research":
-                    status = event.get("status", "")
-                    steps = event.get("steps", [])
-                    if status == "started" and steps:
-                        lines.append(f"- **Research started:** {', '.join(steps)}\n")
-                    elif status == "complete":
-                        lines.append("- **Research complete** ✅\n")
-                    else:
-                        lines.append(f"- **Research:** {status}\n")
-                elif event_type == "research_step":
-                    lines.append(f"  - _{event.get('name')}: {event.get('status')}_\n")
-                elif event_type == "synthesis":
-                    lines.append(f"- **Synthesis:** {event.get('status')}\n")
-                elif event_type == "brief":
-                    lines.append("- **Brief generated** ✅\n")
-                    lines.append(f"  - Brand: {event.get('brief', {}).get('brand_name', '')}\n")
-                elif event_type == "error":
-                    lines.append(f"- **Error:** {event.get('message')}\n")
-
-        # 4. Retrieve the final brief
         brief_resp = await client.get(f"/api/v1/briefs/{session_id}")
+        if brief_resp.status_code == 404:
+            lines.append(
+                "\n**No brief was generated.** "
+                "Check the logs for extraction/research errors "
+                "(e.g. missing or invalid LLM API key).\n",
+            )
+            OUTPUT_FILE.write_text("".join(lines), encoding="utf-8")
+            print(f"Demo transcript written to {OUTPUT_FILE}")
+            print("\nNo brief generated — see logs for errors.")
+            return
+
         brief_resp.raise_for_status()
         brief_data = brief_resp.json()
         brief = brief_data.get("brief", {})
         markdown = brief_data.get("markdown", "")
 
-        lines.append("\n---\n")
-        lines.append("## Final Creative Brief\n")
         lines.append(f"**Brand:** {brief.get('brand_name', '')}\n")
         lines.append(f"**Primary Goal:** {brief.get('primary_goal', '')}\n")
         lines.append(f"**Target Customer:** {brief.get('target_customer', '')}\n")

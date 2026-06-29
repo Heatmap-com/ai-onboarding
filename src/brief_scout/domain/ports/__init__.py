@@ -23,6 +23,7 @@ from brief_scout.domain.ports.provider_config_source_port import ProviderConfigS
 from brief_scout.domain.ports.reloadable_config_port import ReloadableConfig
 from brief_scout.domain.ports.research_pipeline_port import ResearchPipelinePort
 from brief_scout.domain.ports.research_step_registry_port import ResearchStepRegistry
+from brief_scout.domain.ports.research_tool_port import ResearchTool, SearchResult
 from brief_scout.domain.ports.session_lister_port import SessionLister
 from brief_scout.domain.ports.session_storage_port import (
     SessionReader,
@@ -63,6 +64,8 @@ __all__ = [
     "ReloadableConfig",
     "ResearchPipelinePort",
     "ResearchStepRegistry",
+    "ResearchTool",
+    "SearchResult",
     "SessionLister",
     "SessionReader",
     "SessionStoragePort",

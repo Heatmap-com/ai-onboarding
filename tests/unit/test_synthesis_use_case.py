@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from brief_scout.application.services.brief_markdown_renderer import BriefMarkdownRenderer
 from brief_scout.domain.models.brief import Brief, CreativeAngle
 from brief_scout.domain.models.intake import IntakeData
 from brief_scout.domain.models.research import ResearchBundle
@@ -194,7 +195,7 @@ class TestSynthesisUseCase:
         """Brief.to_markdown() should return a non-empty markdown string."""
         brief = await use_case.execute(complete_intake_data, sample_research_bundle)
 
-        md = brief.to_markdown()
+        md = BriefMarkdownRenderer().render(brief)
         assert isinstance(md, str)
         assert len(md) > 0
         assert "# Creative Brief:" in md
@@ -285,7 +286,7 @@ class TestSynthesisUseCase:
 
         assert isinstance(brief, Brief)
         assert brief.brand_name == "Nike"
-        assert brief.to_markdown()  # Should still render
+        assert BriefMarkdownRenderer().render(brief)  # Should still render
 
     @pytest.mark.asyncio
     async def test_should_handle_empty_intake_data(

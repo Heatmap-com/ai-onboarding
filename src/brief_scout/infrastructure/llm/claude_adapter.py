@@ -31,6 +31,7 @@ class ClaudeAdapter(LangChainBaseAdapter):
         temperature: float = 0.3,
         max_tokens: int = 2000,
         timeout_seconds: float = 60.0,
+        max_retries: int = 3,
         telemetry: Any = None,
     ) -> None:
         """Initialize the Claude adapter."""
@@ -42,6 +43,7 @@ class ClaudeAdapter(LangChainBaseAdapter):
             temperature=temperature,
             max_tokens=max_tokens,
             timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
             telemetry=telemetry,
         )
         self._last_system: str | None = None
@@ -86,9 +88,6 @@ class ClaudeAdapter(LangChainBaseAdapter):
         cfg: dict[str, Any],
     ) -> Any:
         """Call the Claude messages endpoint."""
-        # Rebuild system from the original prompt stored on the adapter.
-        # complete() passes the prompt to _build_messages; we reconstruct here.
-        # This is a pragmatic implementation detail for the base contract.
         system = self._last_system
         kwargs: dict[str, Any] = {
             "model": cfg.get("model", self._model),
@@ -142,12 +141,25 @@ class ClaudeAdapter(LangChainBaseAdapter):
         """Build Claude-specific metadata."""
         usage = self._extract_usage(response)
         return {
-            "input_tokens": usage["prompt_tokens"],
-            "output_tokens": usage["completion_tokens"],
+            "prompt_tokens": usage["prompt_tokens"],
+            "completion_tokens": usage["completion_tokens"],
             "stop_sequence": response.stop_sequence,
         }
 
     def _is_retryable_error(self, exc: Exception) -> bool:
         """Classify Claude errors as retryable based on message content."""
+        if isinstance(exc, TimeoutError):
+            return True
         error_msg = str(exc).lower()
-        return "rate_limit" in error_msg or "rate limit" in error_msg or "timeout" in error_msg
+        retryable_keywords = (
+            "rate_limit",
+            "rate limit",
+            "timeout",
+            "temporarily unavailable",
+            "overloaded",
+            "internal_error",
+            "bad gateway",
+            "service unavailable",
+            "connection",
+        )
+        return any(keyword in error_msg for keyword in retryable_keywords)

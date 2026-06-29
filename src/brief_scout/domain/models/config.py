@@ -23,6 +23,7 @@ class LLMProviderConfig(BaseModel):
     temperature: float = 0.3
     max_tokens: int = 2000
     timeout_seconds: float = 30.0
+    max_retries: int = 3
 
     @model_validator(mode="after")
     def _normalize_adapter_id(self) -> LLMProviderConfig:
@@ -148,6 +149,28 @@ class TelemetryConfig(BaseModel):
     correlation_id_header: str = "x-correlation-id"
 
 
+class SearchConfig(BaseModel):
+    """External search tool configuration."""
+
+    model_config = ConfigDict(frozen=False)
+
+    provider: str = "fake"
+    api_key: str = ""
+    base_url: str = ""
+    search_depth: str = "basic"
+
+
+class LLMCacheConfig(BaseModel):
+    """Configuration for the LLM response cache."""
+
+    model_config = ConfigDict(frozen=False)
+
+    enabled: bool = False
+    db_path: str = "./data/llm_cache.db"
+    ttl_seconds: int = 3600
+    max_entries: int = 10000
+
+
 class AppConfig(BaseModel):
     """Root application configuration.
 
@@ -167,6 +190,8 @@ class AppConfig(BaseModel):
     max_concurrent_research_calls: int = 5
     research_timeout_seconds: float = 60.0
     enable_streaming: bool = True
+    search: SearchConfig = Field(default_factory=SearchConfig)
+    llm_cache: LLMCacheConfig = Field(default_factory=LLMCacheConfig)
 
     def get_provider_config(self, provider_name: str) -> LLMProviderConfig:
         """Get configuration for a specific LLM provider.

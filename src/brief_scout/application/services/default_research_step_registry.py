@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from brief_scout.application.services.research_steps import ResearchStep
     from brief_scout.domain.models.config import PromptTemplateConfig
     from brief_scout.domain.ports.application_ports import StructuredCompletionPort
+    from brief_scout.domain.ports.research_tool_port import ResearchTool
 
 
 class DefaultResearchStepRegistry:
@@ -27,6 +28,7 @@ class DefaultResearchStepRegistry:
         prompts: Mapping[str, PromptTemplateConfig],
         llm: StructuredCompletionPort,
         classifier: CategoryClassifier | None = None,
+        search_tool: ResearchTool | None = None,
     ) -> None:
         """Initialize the registry with prompt templates and LLM dependencies.
 
@@ -36,10 +38,12 @@ class DefaultResearchStepRegistry:
                 customer_voice, hook_mining.
             llm: Narrow LLM port for structured completions.
             classifier: Optional category classifier for steps that need it.
+            search_tool: Optional external search tool for grounding results.
         """
         self._prompts = prompts
         self._llm = llm
         self._classifier = classifier or CategoryClassifier()
+        self._search_tool = search_tool
 
     @property
     def steps(self) -> Sequence[ResearchStep]:
@@ -64,23 +68,28 @@ class DefaultResearchStepRegistry:
             BrandAuditStep(
                 template=self._prompts["brand_audit"],
                 llm=self._llm,
+                search_tool=self._search_tool,
             ),
             CompetitorScanStep(
                 template=self._prompts["competitor_scan"],
                 llm=self._llm,
+                search_tool=self._search_tool,
             ),
             TrendPulseStep(
                 template=self._prompts["trend_pulse"],
                 llm=self._llm,
                 classifier=self._classifier,
+                search_tool=self._search_tool,
             ),
             CustomerVoiceStep(
                 template=self._prompts["customer_voice"],
                 llm=self._llm,
                 classifier=self._classifier,
+                search_tool=self._search_tool,
             ),
             HookMiningStep(
                 template=self._prompts["hook_mining"],
                 llm=self._llm,
+                search_tool=self._search_tool,
             ),
         ]

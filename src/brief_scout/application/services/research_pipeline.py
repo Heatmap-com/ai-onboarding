@@ -47,16 +47,22 @@ class ResearchPipeline:
         self,
         steps: Sequence[ResearchStep],
         telemetry: TelemetryPort | None = None,
+        max_concurrent_calls: int | None = None,
+        timeout_seconds: float | None = None,
     ) -> None:
         """Initialize the pipeline with a sequence of steps.
 
         Args:
             steps: Research steps to execute.
             telemetry: Optional telemetry port for logging and events.
+            max_concurrent_calls: Optional semaphore limit for concurrent steps.
+            timeout_seconds: Optional per-step timeout.
         """
         self._steps = list(steps)
         self._telemetry = telemetry
         self._last_bundle: ResearchBundle | None = None
+        self._semaphore = asyncio.Semaphore(max_concurrent_calls) if max_concurrent_calls else None
+        self._timeout = timeout_seconds
 
     @property
     def last_bundle(self) -> ResearchBundle | None:
@@ -128,11 +134,26 @@ class ResearchPipeline:
         step: ResearchStep,
         intake_data: IntakeData,
     ) -> BaseModel:
-        """Run a single step and log telemetry."""
+        """Run a single step under the configured concurrency/timeout limits."""
         self._log("DEBUG", f"Research step starting: {step.name}", step_name=step.name)
-        result = await step.execute(intake_data)
+        if self._semaphore is not None:
+            async with self._semaphore:
+                result = await self._execute(step, intake_data)
+        else:
+            result = await self._execute(step, intake_data)
         self._log("DEBUG", f"Research step complete: {step.name}", step_name=step.name)
         return result
+
+    async def _execute(
+        self,
+        step: ResearchStep,
+        intake_data: IntakeData,
+    ) -> BaseModel:
+        """Execute a single step with an optional timeout."""
+        coro = step.execute(intake_data)
+        if self._timeout is not None:
+            return await asyncio.wait_for(coro, timeout=self._timeout)
+        return await coro
 
     def _log_failure(self, step_name: str, exc: BaseException) -> None:
         """Log a step failure via telemetry."""

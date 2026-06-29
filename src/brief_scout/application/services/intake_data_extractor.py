@@ -54,50 +54,60 @@ class IntakeDataExtractor:
         self,
         messages: list[ChatMessage],
         extraction_system: str,
+        max_retries: int = 1,
     ) -> IntakeData:
         """Extract ``IntakeData`` from the conversation history.
 
         Args:
             messages: Full conversation history.
             extraction_system: System prompt for the extraction LLM call.
+            max_retries: Number of retries on parse/validation failures.
 
         Returns:
             Parsed IntakeData from the conversation.
 
         Raises:
-            LLMCallError: If the LLM call or parsing fails.
+            LLMCallError: If the LLM call or parsing fails after retries.
         """
         self._log("Extracting structured data from conversation", level="DEBUG")
 
-        prompt = self._build_prompt(extraction_system, messages)
         config = self._generic_extraction_config(messages)
+        last_error: Exception | None = None
 
-        try:
-            result = await self._llm.complete_structured(
-                prompt,
-                IntakeData,
-                config=config,
-            )
-            self._log(
-                "Structured data extraction successful",
-                level="DEBUG",
-                brand_name=result.brand_name,
-                competitors_count=len(result.competitors),
-            )
-            return result
-        except BriefScoutError:
-            raise
-        except Exception as exc:
-            self._log(f"Structured extraction failed: {exc}", level="ERROR")
-            raise LLMCallError(
-                message=f"Failed to extract structured intake data: {exc}",
-                provider=self._llm.provider_name,
-            ) from exc
+        for attempt in range(max_retries + 1):
+            prompt = self._build_prompt(extraction_system, messages, attempt=attempt)
+            try:
+                result = await self._llm.complete_structured(
+                    prompt,
+                    IntakeData,
+                    config=config,
+                )
+                self._log(
+                    "Structured data extraction successful",
+                    level="DEBUG",
+                    brand_name=result.brand_name,
+                    competitors_count=len(result.competitors),
+                )
+                return result
+            except BriefScoutError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                self._log(
+                    f"Structured extraction failed (attempt {attempt + 1}): {exc}",
+                    level="WARNING",
+                )
+
+        raise LLMCallError(
+            message=f"Failed to extract structured intake data: {last_error}",
+            provider=self._llm.provider_name,
+        ) from last_error
 
     def _build_prompt(
         self,
         extraction_system: str,
         messages: list[ChatMessage],
+        attempt: int = 0,
     ) -> Any:
         """Build the extraction prompt."""
         from brief_scout.application.services.intake_prompt_builder import (
@@ -105,11 +115,18 @@ class IntakeDataExtractor:
         )
 
         builder = IntakePromptBuilder(renderer=self._renderer)
-        return builder.build_extraction_prompt(
+        prompt = builder.build_extraction_prompt(
             extraction_system,
             self._journey,
             messages,
         )
+        if attempt > 0:
+            retry_note = (
+                "\n\nImportant: your previous response did not match the required "
+                "schema. Return only a valid JSON object that conforms exactly to the schema."
+            )
+            prompt = prompt.model_copy(update={"system": prompt.system + retry_note})
+        return prompt
 
     def _generic_extraction_config(
         self,

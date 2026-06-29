@@ -169,7 +169,7 @@ class TestIntakeUseCase:
         )
 
         assert result.is_complete is True
-        assert result.updated_session.status == "researching"
+        assert result.updated_session.status == "intaking"
         assert "research" in result.assistant_message.lower()
 
     @pytest.mark.asyncio
@@ -322,5 +322,5 @@ class TestIntakeUseCase:
         result = await use_case.process_message(session, "creative and context")
 
         assert result.is_complete is True
-        assert result.updated_session.status == "researching"
+        assert result.updated_session.status == "intaking"
         assert "research" in result.assistant_message.lower()

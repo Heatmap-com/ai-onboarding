@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
@@ -50,6 +51,18 @@ class FailingStep:
 
     async def execute(self, _intake_data: IntakeData) -> None:
         raise RuntimeError("step failed")
+
+
+class SlowStep:
+    """A research step that sleeps."""
+
+    def __init__(self, name: str, delay: float) -> None:
+        self.name = name
+        self._delay = delay
+
+    async def execute(self, _intake_data: IntakeData) -> BrandAuditResult:
+        await asyncio.sleep(self._delay)
+        return BrandAuditResult(brand_positioning="ok")
 
 
 @pytest.fixture
@@ -146,6 +159,47 @@ class TestResearchPipeline:
         failed_event = next(e for e in events if e.stage == "research_step")
         assert failed_event.status == "failed"
         assert "step failed" in failed_event.payload["error"]
+
+    @pytest.mark.asyncio
+    async def test_max_concurrent_calls_limits_concurrency(self) -> None:
+        """Semaphore should cap the number of simultaneously running steps."""
+        steps = [
+            SlowStep("one", 0.05),
+            SlowStep("two", 0.05),
+            SlowStep("three", 0.05),
+        ]
+        pipeline = ResearchPipeline(steps=steps, max_concurrent_calls=1)
+        running = 0
+        max_running = 0
+
+        class TrackingStep:
+            name = "tracking"
+
+            async def execute(self, _intake_data: IntakeData) -> BrandAuditResult:
+                nonlocal running, max_running
+                running += 1
+                max_running = max(max_running, running)
+                await asyncio.sleep(0.01)
+                running -= 1
+                return BrandAuditResult()
+
+        pipeline2 = ResearchPipeline(
+            steps=[TrackingStep(), TrackingStep()],
+            max_concurrent_calls=1,
+        )
+        await pipeline2.execute(IntakeData())
+        assert max_running == 1
+
+        bundle = await pipeline.execute(IntakeData())
+        assert len(bundle.results) == 3
+
+    @pytest.mark.asyncio
+    async def test_timeout_fails_slow_step(self) -> None:
+        """Steps exceeding timeout_seconds should fail gracefully."""
+        steps = [SlowStep("slow", 0.5)]
+        pipeline = ResearchPipeline(steps=steps, timeout_seconds=0.01)
+        bundle = await pipeline.execute(IntakeData())
+        assert "slow" not in bundle.results
 
     def test_pipeline_event_defaults(self) -> None:
         """PipelineEvent should have sensible defaults."""

@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
+from brief_scout.application.services.brief_markdown_renderer import (
+    BriefMarkdownRenderer,
+)
 from brief_scout.application.services.research_pipeline import (
     PipelineEvent as ResearchPipelineEvent,
 )
@@ -63,29 +66,64 @@ class BriefGenerationPipeline:
     async def run(
         self,
         session: ChatSession,
-        user_message: str,
+        user_message: str | None = None,
     ) -> AsyncIterator[PipelineEvent]:
-        """Yield progress events for intake, research, synthesis, and completion."""
-        try:
-            # ─── INTAKE ───
-            intake_result = await self._intake.process_message(session, user_message)
-            yield PipelineEvent(
-                stage="intake",
-                status="complete",
-                payload={
-                    "message": intake_result.assistant_message,
-                    "is_complete": intake_result.is_complete,
-                    "session_id": session.session_id,
-                    "status": intake_result.updated_session.status.value,
-                    "extracted_data": intake_result.extracted_data.model_dump(),
-                },
-            )
+        """Yield progress events for intake, research, synthesis, and completion.
 
-            if not intake_result.is_complete:
-                return
+        Args:
+            session: Current chat session.
+            user_message: Optional user message. When ``None``, the pipeline
+                resumes from the existing session state (used by the idempotent
+                ``POST /pipeline`` endpoint).
+        """
+        try:
+            extracted_data = session.intake_data
+            assistant_message = ""
+            intake_complete = False
+
+            if user_message is not None:
+                # ─── INTAKE ───
+                intake_result = await self._intake.process_message(session, user_message)
+                extracted_data = intake_result.extracted_data
+                assistant_message = intake_result.assistant_message
+                intake_complete = intake_result.is_complete
+                yield PipelineEvent(
+                    stage="intake",
+                    status="complete",
+                    payload={
+                        "message": assistant_message,
+                        "is_complete": intake_complete,
+                        "session_id": session.session_id,
+                        "status": session.status.value,
+                        "extracted_data": extracted_data.model_dump(),
+                    },
+                )
+
+                if not intake_complete:
+                    return
+            else:
+                # Resuming from existing session state.
+                if not session.intake_data.is_complete():
+                    yield PipelineEvent(
+                        stage="intake",
+                        status="progress",
+                        payload={
+                            "message": assistant_message,
+                            "is_complete": False,
+                            "session_id": session.session_id,
+                            "status": session.status.value,
+                            "extracted_data": extracted_data.model_dump(),
+                        },
+                    )
+                    return
+                intake_complete = True
 
             # ─── RESEARCH ───
-            async for event in self._research.stream(intake_result.extracted_data):
+            if session.status != Status.RESEARCHING:
+                session.status = Status.RESEARCHING
+                await self._storage.save_session(session)
+
+            async for event in self._research.stream(extracted_data):
                 # Forward per-step events so consumers can track individual steps.
                 stage = event.stage if event.stage == "research_step" else "research"
                 yield PipelineEvent(
@@ -95,15 +133,30 @@ class BriefGenerationPipeline:
                 )
 
             research_bundle = self._research.last_bundle or await self._research.execute(
-                intake_result.extracted_data,
+                extracted_data,
             )
 
             # ─── SYNTHESIS ───
             yield PipelineEvent(stage="synthesis", status="started")
-            brief = await self._synthesis.execute(
-                intake_result.extracted_data,
-                research_bundle,
-            )
+            try:
+                brief = await self._synthesis.execute(
+                    extracted_data,
+                    research_bundle,
+                )
+            except Exception as exc:  # noqa: BLE001
+                session.status = Status.FAILED
+                await self._storage.save_session(session)
+                yield PipelineEvent(
+                    stage="synthesis",
+                    status="failed",
+                    payload={
+                        "error": str(exc),
+                        "session_id": session.session_id,
+                        "recoverable": True,
+                    },
+                )
+                return
+
             await self._storage.save_brief(session.session_id, brief)
             yield PipelineEvent(stage="synthesis", status="complete")
 
@@ -113,7 +166,7 @@ class BriefGenerationPipeline:
                 status="complete",
                 payload={
                     "brief": brief.model_dump(),
-                    "markdown": brief.to_markdown(),
+                    "markdown": BriefMarkdownRenderer().render(brief),
                     "session_id": session.session_id,
                 },
             )
@@ -128,6 +181,8 @@ class BriefGenerationPipeline:
             )
 
         except Exception as exc:
+            session.status = Status.FAILED
+            await self._storage.save_session(session)
             yield PipelineEvent(
                 stage="complete",
                 status="failed",

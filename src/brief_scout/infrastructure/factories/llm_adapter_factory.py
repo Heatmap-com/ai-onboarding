@@ -71,6 +71,7 @@ class LLMAdapterFactory:
             "temperature": provider_config.temperature,
             "max_tokens": provider_config.max_tokens,
             "timeout_seconds": provider_config.timeout_seconds,
+            "max_retries": provider_config.max_retries,
             "telemetry": telemetry,
             **extras,
         }

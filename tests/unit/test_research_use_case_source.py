@@ -139,14 +139,15 @@ class TestResearchUseCase:
             target_customer="software buyers",
         )
         classifier = CategoryClassifier()
-        category = classifier.classify(intake)
+        category = await classifier.classify(intake)
         assert category == "technology / software"
 
-    def test_should_classify_general_category_by_default(self) -> None:
+    @pytest.mark.asyncio
+    async def test_should_classify_general_category_by_default(self) -> None:
         """CategoryClassifier should return 'general' when no keywords match."""
         intake = IntakeData(brand_name="Xyz", target_customer="everyone")
         classifier = CategoryClassifier()
-        assert classifier.classify(intake) == "general"
+        assert await classifier.classify(intake) == "general"
 
     def test_should_build_prompt_with_placeholders(self) -> None:
         """ResearchPromptBuilder should substitute placeholders in user template."""

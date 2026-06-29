@@ -1,8 +1,9 @@
 """Token-tracking wrapper for any LLM adapter.
 
-Adds prompt/completion token counting (via tiktoken) and cost estimation to
-an underlying LLM port without changing adapter implementations. Enabled in
-``main.py`` when ``BRIEF_SCOUT_TRACK_TOKENS`` is set.
+Adds prompt/completion token counting (preferring provider-reported usage
+metadata) and cost estimation to an underlying LLM port without changing
+adapter implementations. Enabled in ``main.py`` when
+``BRIEF_SCOUT_TRACK_TOKENS`` is set.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 # Rough per-1M-token pricing (USD) for cost estimates. Update as provider
 # pricing changes. Unknown models fall back to gpt-4o-mini.
-_PRICING: dict[str, tuple[float, float]] = {
+_DEFAULT_PRICING: dict[str, tuple[float, float]] = {
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
     "gpt-4-turbo": (10.00, 30.00),
@@ -28,13 +29,14 @@ _PRICING: dict[str, tuple[float, float]] = {
 }
 
 
-def _rates_for(model: str) -> tuple[float, float]:
+def _rates_for(model: str, pricing: dict[str, tuple[float, float]] | None) -> tuple[float, float]:
     """Return (input_rate, output_rate) for a model name."""
+    table = {**_DEFAULT_PRICING, **(pricing or {})}
     lower = model.lower()
-    for key, rates in _PRICING.items():
+    for key, rates in table.items():
         if key in lower:
             return rates
-    return _PRICING["gpt-4o-mini"]
+    return table["gpt-4o-mini"]
 
 
 @dataclass
@@ -46,6 +48,7 @@ class TokenUsageRecord:
     model: str
     input_tokens: int
     output_tokens: int
+    _pricing: dict[str, tuple[float, float]] | None = field(default=None, repr=False)
 
     @property
     def total_tokens(self) -> int:
@@ -53,7 +56,7 @@ class TokenUsageRecord:
 
     @property
     def estimated_cost_usd(self) -> float:
-        input_rate, output_rate = _rates_for(self.model)
+        input_rate, output_rate = _rates_for(self.model, self._pricing)
         return (
             self.input_tokens * input_rate / 1_000_000
             + self.output_tokens * output_rate / 1_000_000
@@ -105,21 +108,29 @@ class TokenUsage:
 
 
 class TokenTrackingLLM:
-    """Wraps an LLM adapter and counts input/output tokens with tiktoken.
+    """Wraps an LLM adapter and counts input/output tokens.
 
     The wrapper transparently delegates every call to the underlying adapter,
-    then records token counts based on the prompt text and the returned
-    structured/text output.
+    then records token counts. When the adapter exposes provider-reported
+    usage via ``last_usage``/``last_model``, those values are used; otherwise
+    tiktoken-based estimates are used as a fallback.
 
     Args:
         adapter: The real LLM adapter to wrap.
         model: Model name used to pick a tiktoken encoding and pricing.
+        pricing: Optional per-model pricing overrides (USD per 1M tokens).
     """
 
-    def __init__(self, adapter: LLMPort, model: str = "gpt-4o-mini") -> None:
+    def __init__(
+        self,
+        adapter: LLMPort,
+        model: str = "gpt-4o-mini",
+        pricing: dict[str, tuple[float, float]] | None = None,
+    ) -> None:
         """Initialize the token-tracking wrapper."""
         self._adapter = adapter
         self._model = model
+        self._pricing = pricing
         self._usage = TokenUsage()
         self._counter = 0
         self._encoder = self._load_encoder(model)
@@ -162,10 +173,32 @@ class TokenTrackingLLM:
             total += self._count_text(str(message.content))
         return total
 
+    def _resolve_usage(
+        self,
+        prompt: Prompt,
+        output_text: str,
+    ) -> tuple[int, int, str]:
+        """Resolve input/output token counts and model name for a call."""
+        reported = getattr(self._adapter, "last_usage", None)
+        model_used = getattr(self._adapter, "last_model", None)
+        if not isinstance(model_used, str):
+            model_used = self._model
+        if reported and isinstance(reported, dict):
+            input_tokens = reported.get("prompt_tokens", 0)
+            output_tokens = reported.get("completion_tokens", 0)
+            if input_tokens > 0 or output_tokens > 0:
+                return input_tokens, output_tokens, model_used
+        return (
+            self._count_prompt(prompt),
+            self._count_text(output_text),
+            model_used,
+        )
+
     def _record(
         self,
         input_tokens: int,
         output_tokens: int,
+        model: str,
     ) -> None:
         """Record a single call's token usage."""
         self._counter += 1
@@ -173,9 +206,10 @@ class TokenTrackingLLM:
             TokenUsageRecord(
                 call_number=self._counter,
                 provider=self.provider_name,
-                model=self._model,
+                model=model,
                 input_tokens=input_tokens,
                 output_tokens=output_tokens,
+                _pricing=self._pricing,
             )
         )
 
@@ -186,9 +220,8 @@ class TokenTrackingLLM:
     ) -> LLMResponse:
         """Execute a completion and record token usage."""
         response = await self._adapter.complete(prompt, config)
-        input_tokens = self._count_prompt(prompt)
-        output_tokens = self._count_text(response.content)
-        self._record(input_tokens, output_tokens)
+        input_tokens, output_tokens, model_used = self._resolve_usage(prompt, response.content)
+        self._record(input_tokens, output_tokens, model_used)
         return response
 
     async def complete_structured(
@@ -203,7 +236,7 @@ class TokenTrackingLLM:
             output_schema,
             config,
         )
-        input_tokens = self._count_prompt(prompt)
-        output_tokens = self._count_text(result.model_dump_json())
-        self._record(input_tokens, output_tokens)
+        output_text = result.model_dump_json()
+        input_tokens, output_tokens, model_used = self._resolve_usage(prompt, output_text)
+        self._record(input_tokens, output_tokens, model_used)
         return result

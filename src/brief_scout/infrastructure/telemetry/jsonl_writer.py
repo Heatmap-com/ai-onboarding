@@ -8,6 +8,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import aiofiles
+
 
 class JsonlWriter:
     """Writes JSON objects as lines to a daily log file."""
@@ -21,7 +23,7 @@ class JsonlWriter:
         self._log_dir = Path(log_dir)
         self._log_dir.mkdir(parents=True, exist_ok=True)
 
-    def write(self, entry: dict[str, Any]) -> None:
+    async def write(self, entry: dict[str, Any]) -> None:
         """Write a single entry to the current day's log file.
 
         Args:
@@ -29,7 +31,7 @@ class JsonlWriter:
         """
         log_file = self._log_dir / f"brief_scout_{date.today().isoformat()}.jsonl"
         try:
-            with log_file.open("a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, default=str) + "\n")
+            async with aiofiles.open(log_file, "a", encoding="utf-8") as f:
+                await f.write(json.dumps(entry, default=str) + "\n")
         except OSError as exc:
             print(f"Failed to write log entry: {exc}", file=sys.stderr)

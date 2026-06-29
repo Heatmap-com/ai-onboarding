@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import aiofiles
 from pydantic import ValidationError
 
 from brief_scout.domain.models.brief import Brief
@@ -65,7 +66,8 @@ class FileSystemStorageAdapter(
     async def save_session(self, session: ChatSession) -> None:
         """Save a chat session as a JSON file."""
         filepath = self._sessions_dir / f"{session.session_id}.json"
-        filepath.write_text(session.model_dump_json(indent=2), encoding="utf-8")
+        async with aiofiles.open(filepath, "w", encoding="utf-8") as f:
+            await f.write(session.model_dump_json(indent=2))
 
     async def get_session(self, session_id: str) -> ChatSession | None:
         """Retrieve a chat session by ID.
@@ -77,7 +79,9 @@ class FileSystemStorageAdapter(
         if not filepath.exists():
             return None
         try:
-            return ChatSession.model_validate_json(filepath.read_text(encoding="utf-8"))
+            async with aiofiles.open(filepath, encoding="utf-8") as f:
+                data = await f.read()
+            return ChatSession.model_validate_json(data)
         except (ValidationError, json.JSONDecodeError, OSError):
             if self._logger is not None:
                 self._logger.log(
@@ -90,7 +94,8 @@ class FileSystemStorageAdapter(
     async def save_brief(self, session_id: str, brief: Brief) -> None:
         """Save a generated brief associated with a session."""
         filepath = self._briefs_dir / f"{session_id}.json"
-        filepath.write_text(brief.model_dump_json(indent=2), encoding="utf-8")
+        async with aiofiles.open(filepath, "w", encoding="utf-8") as f:
+            await f.write(brief.model_dump_json(indent=2))
 
     async def get_brief(self, session_id: str) -> Brief | None:
         """Retrieve a brief by its associated session ID."""
@@ -98,7 +103,9 @@ class FileSystemStorageAdapter(
         if not filepath.exists():
             return None
         try:
-            return Brief.model_validate_json(filepath.read_text(encoding="utf-8"))
+            async with aiofiles.open(filepath, encoding="utf-8") as f:
+                data = await f.read()
+            return Brief.model_validate_json(data)
         except (ValidationError, json.JSONDecodeError, OSError):
             if self._logger is not None:
                 self._logger.log(
@@ -120,7 +127,9 @@ class FileSystemStorageAdapter(
 
         for filepath in sorted(self._sessions_dir.glob("*.json")):
             try:
-                session = ChatSession.model_validate_json(filepath.read_text(encoding="utf-8"))
+                async with aiofiles.open(filepath, encoding="utf-8") as f:
+                    data = await f.read()
+                session = ChatSession.model_validate_json(data)
                 sessions.append(session)
             except (ValidationError, json.JSONDecodeError, OSError) as exc:
                 if self._logger is not None:

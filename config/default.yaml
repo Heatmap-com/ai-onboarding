@@ -87,3 +87,15 @@ storage_adapter: in_memory
 max_concurrent_research_calls: 5
 research_timeout_seconds: 60.0
 enable_streaming: true
+
+search:
+  provider: fake
+  api_key: ""
+  base_url: ""
+  search_depth: basic
+
+llm_cache:
+  enabled: false
+  db_path: "./data/llm_cache.db"
+  ttl_seconds: 3600
+  max_entries: 10000

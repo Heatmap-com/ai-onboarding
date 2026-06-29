@@ -134,13 +134,18 @@ class IntakeUseCase:
                 session.messages,
                 self._extraction_system,
             )
-        except BriefScoutError:
-            # If extraction fails, keep existing data and continue
-            extracted = session.intake_data
+        except BriefScoutError as exc:
             self._logger.log(
-                "Structured data extraction failed; preserving existing data",
+                "Structured data extraction failed",
                 level="WARNING",
                 session_id=session.session_id,
+                error=str(exc),
+            )
+            return IntakeResponse(
+                assistant_message=("I had trouble understanding that. Could you rephrase?"),
+                updated_session=session,
+                is_complete=False,
+                extracted_data=session.intake_data,
             )
 
         # Step 3: Merge extracted data with existing
@@ -177,7 +182,8 @@ class IntakeUseCase:
                 self._journey,
                 merged,
             )
-            session.status = Status.RESEARCHING
+            # Keep status as INTAKING until the pipeline actually starts research.
+            session.status = Status.INTAKING
             is_complete = True
 
         session.messages.append(

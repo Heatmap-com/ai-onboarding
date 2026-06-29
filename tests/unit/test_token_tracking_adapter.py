@@ -18,13 +18,13 @@ from brief_scout.infrastructure.llm.token_tracking_adapter import (
 
 def test_rates_for_unknown_model_falls_back_to_gpt_4o_mini() -> None:
     """_rates_for should return gpt-4o-mini pricing for unknown models."""
-    assert _rates_for("some-unknown-model") == (0.15, 0.60)
+    assert _rates_for("some-unknown-model", None) == (0.15, 0.60)
 
 
 def test_rates_for_known_model() -> None:
     """_rates_for should match known model substrings."""
-    assert _rates_for("gpt-4o") == (2.50, 10.00)
-    assert _rates_for("claude-3-haiku") == (0.25, 1.25)
+    assert _rates_for("gpt-4o", None) == (2.50, 10.00)
+    assert _rates_for("claude-3-haiku", None) == (0.25, 1.25)
 
 
 def test_token_usage_record_cost() -> None:

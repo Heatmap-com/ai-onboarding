@@ -50,7 +50,7 @@ class CompetitorList(BaseModel):
 @pytest.fixture
 def adapter() -> ClaudeAdapter:
     """Return a ClaudeAdapter with a dummy API key."""
-    return ClaudeAdapter(api_key="test-key")
+    return ClaudeAdapter(api_key="test-key", max_retries=0)
 
 
 @pytest.fixture

@@ -1,0 +1,23 @@
+messages:
+  - "I'm Alex. We're building creative for Nike"
+  - "Our competitors are Adidas and Puma"
+  - "We want new customer acquisition"
+  - "Our target is 18-34 year old athletes who care about style and performance"
+  - "Explore authentic athlete stories. Avoid generic celebrity endorsements."
+
+expected_brand_name: "Nike"
+expected_competitors:
+  - "Adidas"
+  - "Puma"
+
+required_fields:
+  - brand_name
+  - brand_positioning
+  - primary_goal
+  - target_customer
+  - creative_angles
+  - sample_headlines
+
+forbidden_brands:
+  - "Adidas"
+  - "Puma"

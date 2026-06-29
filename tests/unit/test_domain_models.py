@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
+from brief_scout.application.services.brief_markdown_renderer import BriefMarkdownRenderer
 from brief_scout.domain.models.brief import Brief, BriefSection, CreativeAngle
 from brief_scout.domain.models.intake import (
     ChatMessage,
@@ -142,7 +143,7 @@ class TestBrief:
     def test_to_markdown_contains_brand(self) -> None:
         """Markdown output contains the brand name."""
         brief = Brief(brand_name="Nike")
-        md = brief.to_markdown()
+        md = BriefMarkdownRenderer().render(brief)
         assert "Nike" in md
         assert "# Creative Brief: Nike" in md
 
@@ -169,7 +170,7 @@ class TestBrief:
             creative_mandatories_avoid=["Elite-only"],
             category_trends=["Sustainability"],
         )
-        md = brief.to_markdown()
+        md = BriefMarkdownRenderer().render(brief)
 
         # Check all section headers are present
         assert "## Brand Positioning" in md
@@ -187,7 +188,7 @@ class TestBrief:
     def test_to_markdown_empty_brief(self) -> None:
         """Markdown for empty brief still renders with brand name."""
         brief = Brief(brand_name="")
-        md = brief.to_markdown()
+        md = BriefMarkdownRenderer().render(brief)
         assert "Creative Brief:" in md
         assert "Brief Scout" in md
 
@@ -203,7 +204,7 @@ class TestBrief:
                 ),
             ],
         )
-        md = brief.to_markdown()
+        md = BriefMarkdownRenderer().render(brief)
         assert "Angle A" in md
         assert "Description of angle A." in md
         assert "Because research says so." in md

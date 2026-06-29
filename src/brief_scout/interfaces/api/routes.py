@@ -1,20 +1,22 @@
 """FastAPI routes with Server-Sent Events (SSE) streaming.
 
 Per SPEC 8.1 — Provides REST endpoints for chat sessions, message
-exchange, brief retrieval, and health checks. The SSE stream endpoint
-is the primary delivery mechanism, streaming real-time progress events
-as the pipeline executes.
+exchange, brief retrieval, and health checks.
 
 Endpoints:
-    POST /api/v1/chat/sessions        — Create a new chat session
-    POST /api/v1/chat/{session_id}/message — Send message, get response
-    GET  /api/v1/chat/{session_id}/stream  — SSE stream (primary)
-    GET  /api/v1/briefs/{session_id}  — Retrieve a generated brief
-    GET  /api/v1/health               — Health check
+    POST /api/v1/chat/sessions                 — Create a new chat session
+    POST /api/v1/chat/{session_id}/message     — Send message; returns JSON
+                                                 while intake is incomplete and
+                                                 streams the full pipeline once
+                                                 intake becomes complete.
+    POST /api/v1/chat/{session_id}/pipeline    — Idempotent pipeline run
+    GET  /api/v1/briefs/{session_id}           — Retrieve a generated brief
+    GET  /api/v1/health                        — Health check
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Annotated, Any
@@ -30,6 +32,9 @@ from brief_scout.application.dto import (
     SessionResponse,
 )
 from brief_scout.application.services import PipelineEvent
+from brief_scout.application.services.brief_markdown_renderer import (
+    BriefMarkdownRenderer,
+)
 from brief_scout.domain.models import ChatSession
 from brief_scout.domain.ports.config_port import ConfigurationPort  # noqa: TC001
 from brief_scout.domain.ports.pipeline_port import PipelinePort  # noqa: TC001
@@ -44,6 +49,17 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
 router = APIRouter(prefix="/api/v1")
+
+# Per-session locks so the idempotent pipeline endpoint can reject concurrent
+# runs without blocking the event loop.
+_pipeline_locks: dict[str, asyncio.Lock] = {}
+
+
+def _get_session_lock(session_id: str) -> asyncio.Lock:
+    """Return (and create if needed) a lock for the given session."""
+    if session_id not in _pipeline_locks:
+        _pipeline_locks[session_id] = asyncio.Lock()
+    return _pipeline_locks[session_id]
 
 
 @router.post("/chat/sessions", response_model=SessionResponse)
@@ -64,69 +80,51 @@ async def create_session(
     )
 
 
-@router.post("/chat/{session_id}/message", response_model=ChatResponse)
+@router.post("/chat/{session_id}/message", response_model=None)
 async def send_message(
     session_id: str,
     request_body: MessageRequest,
     storage: Annotated[BriefStoragePort, Depends(get_storage)],
     pipeline: Annotated[PipelinePort, Depends(get_pipeline)],
-) -> ChatResponse:
-    """Send a message and get the assistant response.
+) -> ChatResponse | EventSourceResponse:
+    """Send a message and run the pipeline.
 
-    Uses the brief generation pipeline's intake stage. If intake completes,
-    research and synthesis are also executed and the final assistant message
-    is returned.
+    While intake is incomplete, returns a JSON ``ChatResponse`` so the client
+    can continue the conversation. Once intake becomes complete, the response
+    switches to an SSE stream of the full pipeline (research, synthesis, brief).
     """
     session = await storage.get_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    assistant_message = ""
-    extracted_data: dict[str, Any] = {}
-    async for event in pipeline.run(session, request_body.message):
-        if event.stage == "intake":
-            assistant_message = event.payload.get("message", "")
-            extracted_data = event.payload.get("extracted_data", {})
-            # The non-streaming message endpoint stops once intake is complete.
-            # Research and synthesis run through the SSE /stream endpoint so
-            # clients get real-time progress and we don't execute the pipeline
-            # twice when both endpoints are used.
-            if event.payload.get("is_complete"):
-                break
+    generator = pipeline.run(session, request_body.message)
 
-    return ChatResponse(
-        message=assistant_message,
-        session_id=session_id,
-        status=session.status,
-        extracted_data=extracted_data,
-    )
+    # Consume the intake event to decide how to respond.
+    first_event = await generator.__anext__()
+    if first_event.stage != "intake":
+        # Defensive: if the pipeline yields something else, just stream it.
+        async def _resume_from(event: PipelineEvent) -> AsyncGenerator[dict[str, Any], None]:
+            yield _make_event(event)
+            async for event in generator:
+                yield _make_event(event)
 
+        return EventSourceResponse(_resume_from(first_event))
 
-@router.get("/chat/{session_id}/stream")
-async def stream_message(
-    session_id: str,
-    message: str,
-    storage: Annotated[BriefStoragePort, Depends(get_storage)],
-    pipeline: Annotated[PipelinePort, Depends(get_pipeline)],
-) -> EventSourceResponse:
-    """SSE endpoint for streaming the full pipeline.
+    if not first_event.payload.get("is_complete"):
+        # Intake still in progress — return a normal JSON response.
+        return ChatResponse(
+            message=first_event.payload.get("message", ""),
+            session_id=session_id,
+            status=session.status,
+            extracted_data=first_event.payload.get("extracted_data", {}),
+        )
 
-    Streams events in real-time as the brief generation pipeline executes:
-        1. ``intake``       — Intake processing result
-        2. ``research``     — Research phase started
-        3. ``research_step``— Individual research call completed
-        4. ``synthesis``    — Synthesis started/completed
-        5. ``brief``        — Final brief with markdown
-        6. ``error``        — On any failure (recoverable)
-    """
-    session = await storage.get_session(session_id)
-    if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    async def _wrapped_generator() -> AsyncGenerator[dict[str, Any], None]:
-        """Async generator yielding SSE events throughout the pipeline."""
+    # Intake complete — stream the rest of the pipeline (including the intake
+    # event so the client still sees the assistant's completion message).
+    async def _stream_pipeline() -> AsyncGenerator[dict[str, Any], None]:
         try:
-            async for event in pipeline.run(session, message):
+            yield _make_event(first_event)
+            async for event in generator:
                 yield _make_event(event)
         except Exception as exc:
             yield _make_event(
@@ -140,6 +138,83 @@ async def stream_message(
                     },
                 )
             )
+
+    return EventSourceResponse(_stream_pipeline())
+
+
+@router.post("/chat/{session_id}/pipeline")
+async def run_pipeline(
+    session_id: str,
+    storage: Annotated[BriefStoragePort, Depends(get_storage)],
+    pipeline: Annotated[PipelinePort, Depends(get_pipeline)],
+) -> EventSourceResponse:
+    """Idempotent pipeline endpoint.
+
+    Accepts only a session ID. If a brief already exists, returns a ``brief``
+    event immediately. If intake is incomplete, returns an ``intake`` event and
+    stops. If the pipeline is already running for this session, returns a
+    ``pipeline_busy`` error event.
+    """
+    session = await storage.get_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    existing_brief = await storage.get_brief(session_id)
+    if existing_brief is not None:
+
+        async def _brief_only() -> AsyncGenerator[dict[str, Any], None]:
+            yield _make_event(
+                PipelineEvent(
+                    stage="brief",
+                    status="complete",
+                    payload={
+                        "brief": existing_brief.model_dump(),
+                        "markdown": BriefMarkdownRenderer().render(existing_brief),
+                        "session_id": session_id,
+                    },
+                )
+            )
+
+        return EventSourceResponse(_brief_only())
+
+    lock = _get_session_lock(session_id)
+    if lock.locked():
+
+        async def _busy() -> AsyncGenerator[dict[str, Any], None]:
+            yield _make_event(
+                PipelineEvent(
+                    stage="pipeline_busy",
+                    status="failed",
+                    payload={
+                        "message": "Pipeline is already running for this session",
+                        "recoverable": True,
+                        "session_id": session_id,
+                    },
+                )
+            )
+
+        return EventSourceResponse(_busy())
+
+    await lock.acquire()
+
+    async def _wrapped_generator() -> AsyncGenerator[dict[str, Any], None]:
+        try:
+            async for event in pipeline.run(session):
+                yield _make_event(event)
+        except Exception as exc:
+            yield _make_event(
+                PipelineEvent(
+                    stage="error",
+                    status="failed",
+                    payload={
+                        "message": str(exc),
+                        "recoverable": True,
+                        "session_id": session_id,
+                    },
+                )
+            )
+        finally:
+            lock.release()
 
     return EventSourceResponse(_wrapped_generator())
 
@@ -177,7 +252,7 @@ async def get_brief(
     return BriefResponse(
         session_id=session_id,
         brief=brief,
-        markdown=brief.to_markdown(),
+        markdown=BriefMarkdownRenderer().render(brief),
     )
 
 

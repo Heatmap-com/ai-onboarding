@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
+from brief_scout.domain.models import IntakeData
 from brief_scout.domain.ports import Prompt
 
 if TYPE_CHECKING:
@@ -30,7 +32,7 @@ class IntakePromptBuilder:
     def build_extraction_prompt(
         self,
         system_template: str,
-        journey: IntakeJourney,
+        _journey: IntakeJourney,
         messages: list[ChatMessage],
     ) -> Prompt:
         """Build an extraction prompt from conversation history.
@@ -43,9 +45,7 @@ class IntakePromptBuilder:
         Returns:
             A ``Prompt`` ready for structured completion.
         """
-        from brief_scout.application.services.journey_renderer import JourneyRenderer
-
-        schema = JourneyRenderer(renderer=self._renderer).render_extraction_schema(journey)
+        schema = json.dumps(IntakeData.model_json_schema(), indent=2)
         system_prompt = self._renderer.render(system_template, {"schema": schema})
 
         transcript_lines: list[str] = []

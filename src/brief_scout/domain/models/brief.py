@@ -55,20 +55,6 @@ class Brief(BaseModel):
     generated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     sources: ResearchBundle = Field(default_factory=ResearchBundle)
 
-    def to_markdown(self) -> str:
-        """Render the brief as markdown.
-
-        This method is kept as a thin convenience wrapper so callers that
-        have not yet been migrated (e.g. the interface layer) continue to
-        work. The actual formatting logic lives in
-        ``BriefMarkdownRenderer``.
-        """
-        from brief_scout.application.services.brief_markdown_renderer import (
-            BriefMarkdownRenderer,
-        )
-
-        return BriefMarkdownRenderer().render(self)
-
     def to_dict(self) -> dict[str, Any]:
         """Serialize the brief to a dictionary."""
         return self.model_dump()

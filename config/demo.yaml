@@ -1,6 +1,8 @@
 # Demo overrides — CreativeOS-style onboarding.
 # Run with: BRIEF_SCOUT_ENV=demo uvicorn brief_scout.main:app --factory
 
+default_llm_provider: openai
+
 telemetry:
   log_dir: "./logs/demo"
   log_level: "INFO"

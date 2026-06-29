@@ -15,10 +15,11 @@ Usage:
 from __future__ import annotations
 
 import os
+import uuid
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from brief_scout.application.services import (
     BriefGenerationPipeline,
@@ -40,7 +41,9 @@ from brief_scout.infrastructure.factories import (
     StorageAdapterFactory,
     TelemetryAdapterFactory,
 )
+from brief_scout.infrastructure.llm.cached_llm import CachedLLM
 from brief_scout.infrastructure.llm.token_tracking_adapter import TokenTrackingLLM
+from brief_scout.infrastructure.research import FakeSearchTool, TavilyWebSearchTool
 from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 from brief_scout.interfaces.api import router
 
@@ -48,6 +51,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from brief_scout.domain.ports.journey_source_port import JourneySource
+    from brief_scout.domain.ports.research_tool_port import ResearchTool
     from brief_scout.domain.ports.storage_port import BriefStoragePort
 
 
@@ -107,6 +111,19 @@ def create_app(
     provider_config = config.get_provider_config(provider_name)
     llm = LLMAdapterFactory().create(provider_config, telemetry=telemetry)
 
+    # Optionally wrap the LLM with a SQLite response cache.
+    cache_config = app_config.llm_cache
+    if cache_config.enabled:
+        llm = CachedLLM(
+            adapter=llm,
+            model=provider_config.model or "unknown",
+            config=cache_config,
+        )
+        telemetry.log(
+            f"LLM response cache enabled at {cache_config.db_path}",
+            level="INFO",
+        )
+
     # Optionally wrap the LLM with token/cost tracking.
     track_tokens = os.environ.get("BRIEF_SCOUT_TRACK_TOKENS", "").lower() in (
         "1",
@@ -162,13 +179,27 @@ def create_app(
         journey=journey,
         extraction_system=config.app_config.prompts.extraction_system,
     )
+    search_config = config.app_config.search
+    search_tool: ResearchTool
+    if search_config.provider == "tavily" and search_config.api_key:
+        search_tool = TavilyWebSearchTool(
+            api_key=search_config.api_key,
+            base_url=search_config.base_url or "",
+            search_depth=search_config.search_depth,
+        )
+    else:
+        search_tool = FakeSearchTool()
+
     research_step_registry = DefaultResearchStepRegistry(
         prompts=config.app_config.prompts.research_steps,
         llm=llm,
+        search_tool=search_tool,
     )
     research_use_case = ResearchUseCase(
         registry=research_step_registry,
         telemetry=telemetry,
+        max_concurrent_calls=config.app_config.max_concurrent_research_calls,
+        timeout_seconds=config.app_config.research_timeout_seconds,
     )
     synthesis_use_case = SynthesisUseCase(
         llm=llm,
@@ -209,6 +240,17 @@ def create_app(
 
     # Include API routes
     app.include_router(router)
+
+    # Correlation-ID middleware: propagate or generate a correlation id for
+    # every request so logs and responses can be traced end-to-end.
+    @app.middleware("http")
+    async def _correlation_middleware(request: Request, call_next: Any) -> Any:
+        header_name = app_config.telemetry.correlation_id_header
+        correlation_id = request.headers.get(header_name) or str(uuid.uuid4())
+        telemetry.set_correlation_id(correlation_id)
+        response = await call_next(request)
+        response.headers[header_name] = correlation_id
+        return response
 
     # Store all dependencies on app.state for route access
     app.state.config = config

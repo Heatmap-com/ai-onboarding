@@ -91,9 +91,8 @@ class TestStreamEndpoint:
         session_id = session_resp.json()["session_id"]
 
         async with client.stream(
-            "GET",
-            f"/api/v1/chat/{session_id}/stream",
-            params={"message": "Hello"},
+            "POST",
+            f"/api/v1/chat/{session_id}/pipeline",
         ) as response:
             assert response.status_code == 200
             events: list[dict[str, Any]] = []
@@ -120,10 +119,15 @@ class TestBriefEndpoint:
         session_resp = await client.post("/api/v1/chat/sessions")
         session_id = session_resp.json()["session_id"]
 
+        # First complete intake via the message endpoint, then run pipeline.
+        await client.post(
+            f"/api/v1/chat/{session_id}/message",
+            json={"message": "Nike, competitors Adidas and Puma, acquisition, athletes"},
+        )
+
         async with client.stream(
-            "GET",
-            f"/api/v1/chat/{session_id}/stream",
-            params={"message": "Nike, competitors Adidas and Puma, acquisition, athletes"},
+            "POST",
+            f"/api/v1/chat/{session_id}/pipeline",
             timeout=30,
         ) as response:
             assert response.status_code == 200
