@@ -178,6 +178,12 @@ class FakeLLMAdapter:
 
         response_content = fixture_data.get("response", "")
         if isinstance(response_content, dict):
+            if not response_content:
+                raise LLMCallError(
+                    message=f"Fixture response is an empty object for {output_schema.__name__}",
+                    provider="fake",
+                    retryable=False,
+                )
             try:
                 return output_schema(**response_content)
             except Exception as validation_exc:

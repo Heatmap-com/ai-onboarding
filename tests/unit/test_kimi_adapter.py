@@ -969,12 +969,15 @@ class TestKimiAdapterGetClient:
     def test_get_client_with_empty_api_key(self) -> None:
         """_get_client should handle empty API key."""
         mock_async_openai = MagicMock()
-        adapter = KimiAdapter(api_key="")
 
-        with patch.dict(
-            "sys.modules",
-            {"openai": self._mock_openai_module(mock_async_openai)},
+        with (
+            patch.dict("os.environ", {"KIMI_API_KEY": ""}),
+            patch.dict(
+                "sys.modules",
+                {"openai": self._mock_openai_module(mock_async_openai)},
+            ),
         ):
+            adapter = KimiAdapter(api_key="")
             adapter._get_client()
 
         mock_async_openai.assert_called_once_with(
