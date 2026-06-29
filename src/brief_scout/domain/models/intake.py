@@ -48,12 +48,6 @@ class IntakeData(BaseModel):
     creative_directions: CreativeDirections = Field(default_factory=CreativeDirections)
     additional_context: str = ""
 
-    def is_complete(self) -> bool:
-        """Return True when all required intake fields are populated."""
-        return bool(
-            self.brand_name and self.competitors and self.primary_goal and self.target_customer
-        )
-
 
 class ChatMessage(BaseModel):
     """A single message in the chat conversation."""

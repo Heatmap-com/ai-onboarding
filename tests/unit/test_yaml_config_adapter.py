@@ -5,7 +5,6 @@ Exercises src/brief_scout/infrastructure/config/yaml_config_adapter.py.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
@@ -97,9 +96,11 @@ class TestYAMLConfigAdapter:
         assert isinstance(provider, LLMProviderConfig)
         assert provider.api_key == "sk-test-key"
 
-    def test_should_leave_missing_env_var_placeholder(self, config_dir: Path) -> None:
+    def test_should_leave_missing_env_var_placeholder(
+        self, config_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Adapter should leave placeholder unchanged if env var is missing."""
-        os.environ.pop("OPENAI_API_KEY_PLACEHOLDER_TEST", None)
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         adapter = YAMLConfigAdapter(config_dir=str(config_dir), env="test")
         provider = adapter.get_provider_config("openai")
 

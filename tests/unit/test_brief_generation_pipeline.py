@@ -11,12 +11,7 @@ from brief_scout.application.services.brief_generation_pipeline import (
     PipelineEvent,
     _map_research_status,
 )
-from brief_scout.application.services.research_pipeline import (
-    PipelineEvent as ResearchPipelineEvent,
-)
-from brief_scout.application.services.research_pipeline import (
-    ResearchPipeline,
-)
+from brief_scout.application.services.research_pipeline import ResearchPipeline
 from brief_scout.application.use_cases.intake_use_case import IntakeResponse
 from brief_scout.domain.models import (
     BrandAuditResult,
@@ -162,19 +157,18 @@ class TestPipelineEventModel:
     """Tests for PipelineEvent default values."""
 
     def test_defaults(self) -> None:
-        """Defaults should match expected values."""
+        """Domain-level PipelineEvent defaults are empty."""
         event = PipelineEvent()
-        assert event.stage == "intake"
-        assert event.status == "progress"
-        assert event.payload == {}
-
-
-class TestResearchPipelineEvent:
-    """Tests for research pipeline event defaults."""
-
-    def test_defaults(self) -> None:
-        """Defaults should be empty."""
-        event = ResearchPipelineEvent()
         assert event.stage == ""
         assert event.status == ""
         assert event.payload == {}
+
+
+class TestBriefPipelineEvent:
+    """Tests for events emitted by BriefGenerationPipeline."""
+
+    def test_intake_event_has_expected_stage(self) -> None:
+        """Pipeline events explicitly set the intake stage/status."""
+        event = PipelineEvent(stage="intake", status="complete")
+        assert event.stage == "intake"
+        assert event.status == "complete"

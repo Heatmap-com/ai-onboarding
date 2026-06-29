@@ -10,7 +10,7 @@ depend on CompletionPort or StructuredCompletionPort as appropriate.
 
 from __future__ import annotations
 
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol, TypeVar, runtime_checkable
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -82,6 +82,7 @@ class Prompt(BaseModel):
         return normalized
 
 
+@runtime_checkable
 class LLMPort(Protocol):
     """Composite port for all LLM interactions.
 

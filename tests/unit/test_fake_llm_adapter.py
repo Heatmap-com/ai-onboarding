@@ -268,6 +268,22 @@ class TestFakeLLMAdapter:
         with pytest.raises(LLMCallError):
             await adapter.complete_structured(prompt, _TestBrandResult)
 
+    @pytest.mark.asyncio
+    async def test_should_raise_on_empty_dict_response_in_structured(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """complete_structured() should raise LLMCallError on empty dict response."""
+        bad_dir = tmp_path / "bad_fixtures4"
+        bad_dir.mkdir()
+        (bad_dir / "empty_dict.json").write_text(
+            json.dumps({"_meta": {"match_keywords": ["empty_dict"]}, "response": {}})
+        )
+        adapter = FakeLLMAdapter(fixture_dir=str(bad_dir), default_fixture="default")
+        prompt = Prompt(user="empty_dict")
+        with pytest.raises(LLMCallError):
+            await adapter.complete_structured(prompt, _TestBrandResult)
+
     def test_provider_name(self) -> None:
         """provider_name should return 'fake'."""
         adapter = FakeLLMAdapter(fixture_dir=str(FIXTURE_DIR))

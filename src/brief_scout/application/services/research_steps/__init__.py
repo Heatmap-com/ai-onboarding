@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
+
+from brief_scout.domain.ports.research_step_port import ResearchStep
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
-
-    from brief_scout.domain.models.intake import IntakeData
     from brief_scout.domain.ports.research_tool_port import ResearchTool
 
 
@@ -29,12 +28,4 @@ async def _search_context(
     return _format_search_results(result.snippets)
 
 
-@runtime_checkable
-class ResearchStep(Protocol):
-    """A single pluggable research step."""
-
-    name: str
-
-    async def execute(self, intake_data: IntakeData) -> BaseModel:
-        """Execute the step and return a typed result."""
-        ...
+__all__ = ["ResearchStep", "_format_search_results", "_search_context"]

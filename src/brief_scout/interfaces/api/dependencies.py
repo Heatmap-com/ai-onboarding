@@ -10,6 +10,10 @@ from typing import TYPE_CHECKING, cast
 
 from fastapi import Request  # noqa: TC002
 
+from brief_scout.application.services.brief_markdown_renderer import (  # noqa: TC001
+    BriefMarkdownRenderer,
+)
+
 if TYPE_CHECKING:
     from brief_scout.domain.models.journey import IntakeJourney
     from brief_scout.domain.ports import (
@@ -103,3 +107,8 @@ def get_synthesis_port(request: Request) -> SynthesisPort:
 def get_pipeline(request: Request) -> PipelinePort:
     """Provide the brief generation pipeline from app.state."""
     return cast("PipelinePort", request.app.state.pipeline)
+
+
+def get_brief_markdown_renderer(request: Request) -> BriefMarkdownRenderer:
+    """Provide the brief markdown renderer from app.state."""
+    return cast("BriefMarkdownRenderer", request.app.state.brief_markdown_renderer)

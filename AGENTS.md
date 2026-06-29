@@ -104,7 +104,7 @@ Research steps are now pluggable. To add a new research dimension:
 
    ```python
    from pydantic import BaseModel
-   from brief_scout.application.services.research_pipeline import ResearchStep
+   from brief_scout.domain.ports.research_step_port import ResearchStep
 
    class MarketSizingResult(BaseModel):
        tam: str = ""
