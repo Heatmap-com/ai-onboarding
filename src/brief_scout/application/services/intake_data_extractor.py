@@ -31,7 +31,7 @@ class IntakeDataExtractor:
         self,
         llm: StructuredCompletionPort,
         journey: IntakeJourney,
-        renderer: TemplateRenderer | None = None,
+        renderer: TemplateRenderer,
         provider_config_source: ProviderConfigSource | None = None,
         logger: LoggerPort | None = None,
     ) -> None:
@@ -40,7 +40,7 @@ class IntakeDataExtractor:
         Args:
             llm: Narrow LLM port for structured completions.
             journey: Declarative intake journey schema.
-            renderer: Optional template renderer for prompt building.
+            renderer: Template renderer for prompt building.
             provider_config_source: Source for provider-specific extras.
             logger: Optional logger for diagnostics.
         """

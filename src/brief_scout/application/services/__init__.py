@@ -17,12 +17,9 @@ from brief_scout.application.services.journey_acknowledgement_service import (
     JourneyAcknowledgementService,
 )
 from brief_scout.application.services.journey_renderer import JourneyRenderer
-from brief_scout.application.services.research_pipeline import (
-    PipelineEvent,
-    ResearchPipeline,
-    ResearchStep,
-)
-from brief_scout.application.services.template_renderer import Jinja2TemplateRenderer
+from brief_scout.application.services.research_pipeline import ResearchPipeline
+from brief_scout.domain.ports.pipeline_event import PipelineEvent
+from brief_scout.domain.ports.research_step_port import ResearchStep
 
 __all__ = [
     "BriefGenerationPipeline",
@@ -30,7 +27,6 @@ __all__ = [
     "DefaultResearchStepRegistry",
     "IntakeDataDiffer",
     "IntakeDataExtractor",
-    "Jinja2TemplateRenderer",
     "JourneyAcknowledgementService",
     "JourneyRenderer",
     "PipelineEvent",

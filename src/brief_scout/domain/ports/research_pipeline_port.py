@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
-    from brief_scout.application.services.research_pipeline import PipelineEvent
     from brief_scout.domain.models.intake import IntakeData
     from brief_scout.domain.models.research import ResearchBundle
+    from brief_scout.domain.ports.pipeline_event import PipelineEvent
 
 
 class ResearchPipelinePort(Protocol):

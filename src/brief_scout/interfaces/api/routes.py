@@ -31,15 +31,16 @@ from brief_scout.application.dto import (
     MessageRequest,
     SessionResponse,
 )
-from brief_scout.application.services import PipelineEvent
-from brief_scout.application.services.brief_markdown_renderer import (
+from brief_scout.application.services.brief_markdown_renderer import (  # noqa: TC001
     BriefMarkdownRenderer,
 )
 from brief_scout.domain.models import ChatSession
 from brief_scout.domain.ports.config_port import ConfigurationPort  # noqa: TC001
+from brief_scout.domain.ports.pipeline_event import PipelineEvent
 from brief_scout.domain.ports.pipeline_port import PipelinePort  # noqa: TC001
 from brief_scout.domain.ports.storage_port import BriefStoragePort  # noqa: TC001
 from brief_scout.interfaces.api.dependencies import (
+    get_brief_markdown_renderer,
     get_config,
     get_pipeline,
     get_storage,
@@ -147,6 +148,7 @@ async def run_pipeline(
     session_id: str,
     storage: Annotated[BriefStoragePort, Depends(get_storage)],
     pipeline: Annotated[PipelinePort, Depends(get_pipeline)],
+    renderer: Annotated[BriefMarkdownRenderer, Depends(get_brief_markdown_renderer)],
 ) -> EventSourceResponse:
     """Idempotent pipeline endpoint.
 
@@ -169,7 +171,7 @@ async def run_pipeline(
                     status="complete",
                     payload={
                         "brief": existing_brief.model_dump(),
-                        "markdown": BriefMarkdownRenderer().render(existing_brief),
+                        "markdown": renderer.render(existing_brief),
                         "session_id": session_id,
                     },
                 )
@@ -239,6 +241,7 @@ def _make_event(event: PipelineEvent) -> dict[str, Any]:
 async def get_brief(
     session_id: str,
     storage: Annotated[BriefStoragePort, Depends(get_storage)],
+    renderer: Annotated[BriefMarkdownRenderer, Depends(get_brief_markdown_renderer)],
 ) -> BriefResponse:
     """Retrieve a generated brief by session ID."""
     brief = await storage.get_brief(session_id)
@@ -252,7 +255,7 @@ async def get_brief(
     return BriefResponse(
         session_id=session_id,
         brief=brief,
-        markdown=BriefMarkdownRenderer().render(brief),
+        markdown=renderer.render(brief),
     )
 
 

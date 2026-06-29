@@ -19,8 +19,8 @@ class JourneyAcknowledgementService:
     acknowledge (only those newly provided in the latest turn).
     """
 
-    def __init__(self, renderer: TemplateRenderer | None = None) -> None:
-        """Initialize the service with an optional template renderer."""
+    def __init__(self, renderer: TemplateRenderer) -> None:
+        """Initialize the service with a template renderer."""
         self._renderer = renderer
         self._journey_renderer: JourneyRenderer | None = None
 

@@ -23,6 +23,7 @@ from fastapi import FastAPI, Request
 
 from brief_scout.application.services import (
     BriefGenerationPipeline,
+    BriefMarkdownRenderer,
     DefaultResearchStepRegistry,
     IntakeDataDiffer,
     IntakeDataExtractor,
@@ -36,6 +37,7 @@ from brief_scout.application.use_cases import (
 from brief_scout.domain.services import CompletenessChecker, IntakeDataMerger
 from brief_scout.infrastructure.factories import (
     ConfigAdapterFactory,
+    DefaultSearchToolFactory,
     JourneySourceFactory,
     LLMAdapterFactory,
     StorageAdapterFactory,
@@ -43,7 +45,6 @@ from brief_scout.infrastructure.factories import (
 )
 from brief_scout.infrastructure.llm.cached_llm import CachedLLM
 from brief_scout.infrastructure.llm.token_tracking_adapter import TokenTrackingLLM
-from brief_scout.infrastructure.research import FakeSearchTool, TavilyWebSearchTool
 from brief_scout.infrastructure.template import Jinja2TemplateRenderer
 from brief_scout.interfaces.api import router
 
@@ -179,16 +180,9 @@ def create_app(
         journey=journey,
         extraction_system=config.app_config.prompts.extraction_system,
     )
-    search_config = config.app_config.search
-    search_tool: ResearchTool
-    if search_config.provider == "tavily" and search_config.api_key:
-        search_tool = TavilyWebSearchTool(
-            api_key=search_config.api_key,
-            base_url=search_config.base_url or "",
-            search_depth=search_config.search_depth,
-        )
-    else:
-        search_tool = FakeSearchTool()
+    search_tool: ResearchTool = DefaultSearchToolFactory().create(
+        config.app_config.search,
+    )
 
     research_step_registry = DefaultResearchStepRegistry(
         prompts=config.app_config.prompts.research_steps,
@@ -270,6 +264,7 @@ def create_app(
     app.state.research_pipeline = research_pipeline
     app.state.research_pipeline_port = research_pipeline
     app.state.pipeline = pipeline
+    app.state.brief_markdown_renderer = BriefMarkdownRenderer()
 
     telemetry.log(
         "Application factory complete — all dependencies wired",

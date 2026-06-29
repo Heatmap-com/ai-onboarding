@@ -153,9 +153,15 @@ class FakeLLMAdapter:
             except (json.JSONDecodeError, OSError):
                 continue
 
-    async def complete(self, prompt: Any, _config: dict[str, Any] | None = None) -> Any:
+    async def complete(
+        self,
+        prompt: Any,
+        config: dict[str, Any] | None = None,
+        **_kwargs: Any,
+    ) -> Any:
         """Return a fixture-based LLMResponse."""
-        latency = self.latency_ms / 1000.0
+        merged_config = config or {}
+        latency = merged_config.get("latency_ms", self.latency_ms) / 1000.0
         fixture_data = self._match_fixture(prompt)
         meta = fixture_data.get("_meta", {})
         if "latency_ms" in meta:
@@ -201,10 +207,14 @@ class FakeLLMAdapter:
         self,
         prompt: Any,
         output_schema: type[T],
-        _config: dict[str, Any] | None = None,
+        config: dict[str, Any] | None = None,
+        **_kwargs: Any,
     ) -> T:
         """Return a fixture parsed into the requested Pydantic model."""
-        fixture_data = self._match_fixture(prompt)
+        merged_config = config or {}
+        fixture_data = self._match_fixture(
+            prompt, override_fixture=merged_config.get("fixture_name")
+        )
         response_data = fixture_data.get("response", {})
         return output_schema.model_validate(response_data)
 
@@ -212,8 +222,18 @@ class FakeLLMAdapter:
     def provider_name(self) -> str:
         return "fake"
 
-    def _match_fixture(self, prompt: Any) -> dict[str, Any]:
+    def _match_fixture(
+        self,
+        prompt: Any,
+        override_fixture: str | None = None,
+    ) -> dict[str, Any]:
         """Pattern-match prompt content to find appropriate fixture."""
+        if override_fixture is not None:
+            explicit = self._fixtures.get(override_fixture)
+            if explicit:
+                self._last_fixture_key = override_fixture
+                return explicit
+
         prompt_text = ""
         if hasattr(prompt, "user"):
             prompt_text = getattr(prompt, "user", "") or ""

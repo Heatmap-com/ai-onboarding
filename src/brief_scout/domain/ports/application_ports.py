@@ -73,6 +73,7 @@ class StructuredCompletionPort(Protocol):
         ...
 
 
+@runtime_checkable
 class TemplateRenderer(Protocol):
     """Port for rendering string templates.
 

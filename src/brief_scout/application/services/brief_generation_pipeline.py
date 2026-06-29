@@ -6,27 +6,15 @@ domain progress events. The interface layer can wrap these events in SSE.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+from pydantic import BaseModel
 
 from brief_scout.application.services.brief_markdown_renderer import (
     BriefMarkdownRenderer,
 )
-from brief_scout.application.services.research_pipeline import (
-    PipelineEvent as ResearchPipelineEvent,
-)
 from brief_scout.domain.models.intake import Status
-
-
-class PipelineEvent(ResearchPipelineEvent):
-    """Domain event emitted by the brief generation pipeline.
-
-    Defaults are tuned for the top-level pipeline so that a minimal event
-    represents an in-progress intake stage.
-    """
-
-    stage: str = "intake"
-    status: str = "progress"
-
+from brief_scout.domain.ports.pipeline_event import PipelineEvent
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -38,6 +26,28 @@ if TYPE_CHECKING:
         ResearchPipelinePort,
         SynthesisPort,
     )
+    from brief_scout.domain.ports.completeness_port import CompletenessCheckPort
+
+
+class _BackwardCompatibleCompletenessChecker(BaseModel):
+    """Temporary fallback preserving the old ``IntakeData.is_complete()`` behavior.
+
+    TODO(integration): Remove this helper once ``main.py`` injects the domain
+    ``CompletenessChecker`` into ``BriefGenerationPipeline``.
+    """
+
+    def check(self, intake_data: Any) -> Any:
+        from brief_scout.domain.models.intake import IntakeData
+
+        data = IntakeData.model_validate(intake_data)
+        is_complete = bool(
+            data.brand_name and data.competitors and data.primary_goal and data.target_customer
+        )
+        return type(
+            "CompletenessResult",
+            (),
+            {"is_complete": is_complete},
+        )()
 
 
 class BriefGenerationPipeline:
@@ -49,6 +59,7 @@ class BriefGenerationPipeline:
         research_pipeline: ResearchPipelinePort,
         synthesis_use_case: SynthesisPort,
         storage: BriefStoragePort,
+        completeness_checker: CompletenessCheckPort | None = None,
     ) -> None:
         """Initialize the pipeline with injected use cases and storage.
 
@@ -57,11 +68,17 @@ class BriefGenerationPipeline:
             research_pipeline: Research execution pipeline.
             synthesis_use_case: Brief synthesis use case.
             storage: Storage port for persisting sessions and briefs.
+            completeness_checker: Optional completeness checker. If omitted, a
+                backward-compatible checker is used until the integration wave
+                wires the domain checker.
         """
         self._intake = intake_use_case
         self._research = research_pipeline
         self._synthesis = synthesis_use_case
         self._storage = storage
+        self._completeness_checker = (
+            completeness_checker or _BackwardCompatibleCompletenessChecker()
+        )
 
     async def run(
         self,
@@ -103,7 +120,7 @@ class BriefGenerationPipeline:
                     return
             else:
                 # Resuming from existing session state.
-                if not session.intake_data.is_complete():
+                if not self._completeness_checker.check(session.intake_data).is_complete:
                     yield PipelineEvent(
                         stage="intake",
                         status="progress",

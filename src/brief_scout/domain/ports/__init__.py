@@ -17,11 +17,13 @@ from brief_scout.domain.ports.intake_port import IntakePort
 from brief_scout.domain.ports.journey_source_port import JourneySource
 from brief_scout.domain.ports.llm_port import LLMPort, LLMResponse, Prompt
 from brief_scout.domain.ports.logger_port import LoggerPort
+from brief_scout.domain.ports.pipeline_event import PipelineEvent
 from brief_scout.domain.ports.pipeline_port import PipelinePort
 from brief_scout.domain.ports.prompt_template_provider_port import PromptTemplateProvider
 from brief_scout.domain.ports.provider_config_source_port import ProviderConfigSource
 from brief_scout.domain.ports.reloadable_config_port import ReloadableConfig
 from brief_scout.domain.ports.research_pipeline_port import ResearchPipelinePort
+from brief_scout.domain.ports.research_step_port import ResearchStep
 from brief_scout.domain.ports.research_step_registry_port import ResearchStepRegistry
 from brief_scout.domain.ports.research_tool_port import ResearchTool, SearchResult
 from brief_scout.domain.ports.session_lister_port import SessionLister
@@ -57,12 +59,14 @@ __all__ = [
     "LLMPort",
     "LLMResponse",
     "LoggerPort",
+    "PipelineEvent",
     "PipelinePort",
     "Prompt",
     "PromptTemplateProvider",
     "ProviderConfigSource",
     "ReloadableConfig",
     "ResearchPipelinePort",
+    "ResearchStep",
     "ResearchStepRegistry",
     "ResearchTool",
     "SearchResult",

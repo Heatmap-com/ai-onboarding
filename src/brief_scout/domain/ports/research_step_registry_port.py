@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from brief_scout.application.services.research_steps import ResearchStep
+    from brief_scout.domain.ports.research_step_port import ResearchStep
 
 
 class ResearchStepRegistry(Protocol):
